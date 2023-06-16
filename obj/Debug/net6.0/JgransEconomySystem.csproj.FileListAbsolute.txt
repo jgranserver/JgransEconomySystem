@@ -1,0 +1,13 @@
+D:\Projects\JgransEconomySystem\obj\Debug\net6.0\JgransEconomySystem.csproj.AssemblyReference.cache
+D:\Projects\JgransEconomySystem\obj\Debug\net6.0\JgransEconomySystem.GeneratedMSBuildEditorConfig.editorconfig
+D:\Projects\JgransEconomySystem\obj\Debug\net6.0\JgransEconomySystem.AssemblyInfoInputs.cache
+D:\Projects\JgransEconomySystem\obj\Debug\net6.0\JgransEconomySystem.AssemblyInfo.cs
+D:\Projects\JgransEconomySystem\obj\Debug\net6.0\JgransEconomySystem.csproj.CoreCompileInputs.cache
+D:\Projects\JgransEconomySystem\bin\Debug\net6.0\HttpServer.dll
+D:\Projects\JgransEconomySystem\bin\Debug\net6.0\JgransEconomySystem.deps.json
+D:\Projects\JgransEconomySystem\bin\Debug\net6.0\JgransEconomySystem.dll
+D:\Projects\JgransEconomySystem\bin\Debug\net6.0\JgransEconomySystem.pdb
+D:\Projects\JgransEconomySystem\obj\Debug\net6.0\JgransEconomySystem.dll
+D:\Projects\JgransEconomySystem\obj\Debug\net6.0\refint\JgransEconomySystem.dll
+D:\Projects\JgransEconomySystem\obj\Debug\net6.0\JgransEconomySystem.pdb
+D:\Projects\JgransEconomySystem\obj\Debug\net6.0\ref\JgransEconomySystem.dll
