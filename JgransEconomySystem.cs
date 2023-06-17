@@ -12,6 +12,7 @@ using TShockAPI.Hooks;
 using Microsoft.Xna.Framework;
 using Terraria.Localization;
 using TShockAPI.DB;
+using System.Diagnostics;
 
 namespace JgransEconomySystem
 {
@@ -28,7 +29,7 @@ namespace JgransEconomySystem
 
 		public override string Name => "JgransEconomySystem";
 
-		public override Version Version => new Version(1, 1);
+		public override Version Version => new Version(2, 0);
 
 		public override string Author => "jgranserver";
 
@@ -37,9 +38,22 @@ namespace JgransEconomySystem
 		public override void Initialize()
 		{
 			bank = new EconomyDatabase(path);
-			ServerApi.Hooks.NetSendData.Register(this, Economy);
-			Commands.ChatCommands.Add(new Command("jgraneconomy.system", EconomyCommands, "bank"));
+			ServerApi.Hooks.NetSendData.Register(this, EconomyAsync);
+			ServerApi.Hooks.NetGetData.Register(this, OnNetGetData);
+			Commands.ChatCommands.Add(new Command("jgraneconomy.system", EconomyCommandsAsync, "bank"));
+			Commands.ChatCommands.Add(new Command("jgranserver.admin", SetupShopCommand, "setshop"));
 		}
+
+		private async void EconomyCommandsAsync(CommandArgs args)
+		{
+			await EconomyCommands(args);
+		}
+
+		private async void EconomyAsync(SendDataEventArgs args)
+		{
+			await Economy(args);
+		}
+
 
 		public void OnInit(EventArgs e)
 		{
@@ -51,7 +65,7 @@ namespace JgransEconomySystem
 			base.Dispose(disposing);
 		}
 
-		private void Economy(SendDataEventArgs args)
+		private async Task Economy(SendDataEventArgs args)
 		{
 			var data = args.MsgId;
 			var npcIndex = args.number;
@@ -70,10 +84,8 @@ namespace JgransEconomySystem
 
 			var player = players[0];
 
-
 			switch (data)
 			{
-
 				case PacketTypes.NpcStrike:
 					if (npcIndex >= Main.npc.Length || npcIndex < 0)
 					{
@@ -101,82 +113,72 @@ namespace JgransEconomySystem
 					int currencyAmount = 0;
 					string reason = "";
 
-					// Define a dictionary to store the last reward time for each player
-					Dictionary<string, DateTime> lastRewardTimes = new Dictionary<string, DateTime>();
+					switch (npc.netID)
+					{
+						case int id when isBoss3 && randomizer <= lowRate + medRate + highRate + perfectRate:
+							currencyAmount = Main.rand.Next(1000);
+							reason = Transaction.ReceivedFromKillingBossNPC;
+							break;
 
-					// Check if enough time has passed since the last reward
-					DateTime currentTime = DateTime.Now;
-					TimeSpan cooldown = TimeSpan.FromSeconds(10); // Set the cooldown duration
-					bool cooldownUp = (lastRewardTimes.TryGetValue(player.Name, out DateTime lastRewardTime) && currentTime - lastRewardTime < cooldown);
+						case int id when isBoss2 && randomizer <= lowRate + medRate + highRate + perfectRate:
+							currencyAmount = Main.rand.Next(600);
+							reason = Transaction.ReceivedFromKillingBossNPC;
+							break;
 
-					if (!cooldownUp && randomizer <= lowRate + medRate + highRate + perfectRate && isBoss3)
-					{
-						currencyAmount = Main.rand.Next(1000);
-						reason = Transaction.ReceivedFromKillingBossNPC;
-						TSPlayer.All.SendMessage($"{player.Name} has been rewarded {currencyAmount} {currencyName} for the last hit blow!", Color.LightBlue);
-						lastRewardTimes[player.Name] = currentTime;
-					}
-					else if (!cooldownUp && randomizer <= lowRate + medRate + highRate + perfectRate && isBoss2)
-					{
-						currencyAmount = Main.rand.Next(600);
-						reason = Transaction.ReceivedFromKillingBossNPC;
-						TSPlayer.All.SendMessage($"{player.Name} has been rewarded {currencyAmount} {currencyName} for the last hit blow!", Color.LightBlue);
-						lastRewardTimes[player.Name] = currentTime;
-					}
-					else if (!cooldownUp && randomizer <= lowRate + medRate + highRate + perfectRate && isBoss1)
-					{
-						currencyAmount = Main.rand.Next(380);
-						reason = Transaction.ReceivedFromKillingBossNPC;
-						TSPlayer.All.SendMessage($"{player.Name} has been rewarded {currencyAmount} {currencyName} for the last hit blow!", Color.LightBlue);
-						lastRewardTimes[player.Name] = currentTime;
-					}
-					else if (randomizer <= lowRate + medRate + highRate && isSpecial)
-					{
-						currencyAmount = Main.rand.Next(50);
-						reason = Transaction.ReceivedFromKillingSpecialNPC;
-					}
-					else if (randomizer <= lowRate + medRate && isHostile)
-					{
-						currencyAmount = Main.rand.Next(15);
-						reason = Transaction.ReceivedFromKillingHostileNPC;
-					}
-					else if (randomizer <= lowRate && !(isHostile || isSpecial || isBoss1 || isBoss2 || isBoss3))
-					{
-						currencyAmount = Main.rand.Next(3);
-						reason = Transaction.ReceivedFromKillingNormalNPC;
+						case int id when isBoss1 && randomizer <= lowRate + medRate + highRate + perfectRate:
+							currencyAmount = Main.rand.Next(380);
+							reason = Transaction.ReceivedFromKillingBossNPC;
+							break;
+
+						case int id when isSpecial && randomizer <= lowRate + medRate + highRate:
+							currencyAmount = Main.rand.Next(50);
+							reason = Transaction.ReceivedFromKillingSpecialNPC;
+							break;
+
+						case int id when isHostile && randomizer <= lowRate + medRate:
+							currencyAmount = Main.rand.Next(15);
+							reason = Transaction.ReceivedFromKillingHostileNPC;
+							break;
+
+						case int id when !(isHostile || isSpecial || isBoss1 || isBoss2 || isBoss3) && randomizer <= lowRate:
+							currencyAmount = Main.rand.Next(3);
+							reason = Transaction.ReceivedFromKillingNormalNPC;
+							break;
 					}
 
 					if (currencyAmount > 0)
 					{
-						bool accountExists = bank.PlayerAccountExists(player.Account.ID);
+						bool accountExists = await bank.PlayerAccountExists(player.Account.ID);
 						if (!accountExists)
 						{
-							bank.AddPlayerAccount(player.Account.ID, 0);
+							await bank.AddPlayerAccount(player.Account.ID, 0);
 							player.SendInfoMessage("Jgrans Economy System Running!");
 							player.SendInfoMessage("A new bank account has been created for your account.");
 						}
 
-						int balance = bank.GetCurrencyAmount(player.Account.ID);
-						int newBalance = balance + currencyAmount;
-						bank.RecordTransaction(player.Name, reason, currencyAmount);
-						player.SendData(PacketTypes.CreateCombatTextExtended, $"{currencyAmount} {currencyName}", (int)Color.LightBlue.PackedValue, player.X, player.Y);
-						bank.SaveCurrencyAmount(player.Account.ID, newBalance);
+						if (isBoss1 || isBoss2 || isBoss3)
+						{
+							TSPlayer.All.SendMessage($"{player.Name} has been rewarded {currencyAmount} {currencyName} for the last hit blow!", Color.LightBlue);
+						}
 
-						// Update the last reward time for the player
-						lastRewardTimes[player.Name] = currentTime;
+						int balance = await bank.GetCurrencyAmount(player.Account.ID);
+						int newBalance = balance + currencyAmount;
+						await bank.RecordTransaction(player.Name, reason, currencyAmount);
+						player.SendData(PacketTypes.CreateCombatTextExtended, $"{currencyAmount} {currencyName}", (int)Color.LightBlue.PackedValue, player.X, player.Y);
+						await bank.SaveCurrencyAmount(player.Account.ID, newBalance);
 
 						return;
 					}
-
 					break;
-
 
 				default:
 					return;
 			}
 		}
 
-		public void EconomyCommands(CommandArgs args)
+
+
+		public async Task EconomyCommands(CommandArgs args)
 		{
 			var cmd = args.Parameters;
 			var player = args.Player;
@@ -190,7 +192,7 @@ namespace JgransEconomySystem
 			switch (cmd[0])
 			{
 				case "bal":
-					var bal = bank.GetCurrencyAmount(player.Account.ID);
+					var bal = await bank.GetCurrencyAmount(player.Account.ID);
 					player.SendMessage($"Bank Balance: [c/#00FF6E:{bal}]", Color.LightBlue);
 					break;
 
@@ -213,11 +215,11 @@ namespace JgransEconomySystem
 
 					try
 					{
-						targetIdExist = bank.PlayerAccountExists(target.ID);
+						targetIdExist = await bank.PlayerAccountExists(target.ID);
 
 						if (targetIdExist)
 						{
-							targetBal = bank.GetCurrencyAmount(target.ID);
+							targetBal = await bank.GetCurrencyAmount(target.ID);
 						}
 					}
 					catch (NullReferenceException)
@@ -254,14 +256,14 @@ namespace JgransEconomySystem
 					int receiverId = receiverAccount.ID;
 					int senderId = player.Account.ID;
 
-					int receiverBalance = bank.GetCurrencyAmount(receiverId);
-					int senderBalance = bank.GetCurrencyAmount(senderId);
+					int receiverBalance = await bank.GetCurrencyAmount(receiverId);
+					int senderBalance = await bank.GetCurrencyAmount(senderId);
 
 					int receiverNewBalance = receiverBalance + payment;
 					int senderNewBalance = senderBalance - payment;
 
-					Transaction.ProcessTransaction(receiverId, receiverAccount.Name, payment, 0.2);
-					bank.SaveCurrencyAmount(senderId, senderNewBalance);
+					await Transaction.ProcessTransaction(receiverId, receiverAccount.Name, payment, 0.2);
+					await bank.SaveCurrencyAmount(senderId, senderNewBalance);
 
 					player.SendSuccessMessage($"You have successfully paid {payment} {currencyName} to {receiverPlayer.Name}.");
 					receiverPlayer.SendSuccessMessage($"You have received {payment} {currencyName} from {player.Name}.");
@@ -278,8 +280,104 @@ namespace JgransEconomySystem
 						player.SendErrorMessage("Invalid command format. Usage: /bank resetall");
 						return;
 					}
-					bank.ResetAllCurrencyAmounts();
+					player.SendMessage($"All bank accounts has been reset.", Color.LightBlue);
+					await bank.ResetAllCurrencyAmounts();
 					break;
+
+				case "help":
+				default:
+					player.SendMessage("Bank commands:", Color.LightBlue);
+					player.SendMessage("/bank bal", Color.LightBlue);
+					player.SendMessage("/bank pay", Color.LightBlue);
+					if (!player.Group.HasPermission("jgranserver.admin"))
+					{
+						player.SendMessage("/bank resetall", Color.LightBlue);
+						player.SendMessage("/bank check", Color.LightBlue);
+					}
+					break;
+			}
+		}
+
+		private void SetupShopCommand(CommandArgs args)
+		{
+			var player = args.Player;
+			var parameters = args.Parameters;
+
+			if (parameters.Count < 3)
+			{
+				player.SendErrorMessage("Invalid command format. Usage: /setupshop <itemID> <stack> <price>");
+				return;
+			}
+
+			if (!int.TryParse(parameters[0], out int item) ||
+				!int.TryParse(parameters[1], out int stack) ||
+				!int.TryParse(parameters[2], out int price))
+			{
+				player.SendErrorMessage("Invalid parameter format. Item, stack, and price must be integers.");
+				return;
+			}
+
+			// Store the item, stack, and price values in variables for later use
+			int itemID = item;
+			int stackSize = stack;
+			int shopPrice = price;
+
+			player.SendSuccessMessage("Hit a switch to register the shop.");
+			player.SetData("SwitchShopItemID", itemID);
+			player.SetData("SwitchShopStackSize", stackSize);
+			player.SetData("SwitchShopPrice", shopPrice);
+			player.SetData("IsSettingUpShop", true);
+		}
+
+		private void OnNetGetData(GetDataEventArgs args)
+		{
+			// Check if the packet type is HitSwitch
+			if (args.MsgID == PacketTypes.HitSwitch)
+			{
+				TSPlayer player = TShock.Players[args.Msg.whoAmI];
+				if (player != null)
+				{
+					// Handle the HitSwitch packet
+					HandleHitSwitchPacket(player, args);
+				}
+			}
+		}
+
+		private async void HandleHitSwitchPacket(TSPlayer player, GetDataEventArgs args)
+		{
+			using (MemoryStream stream = new MemoryStream(args.Msg.readBuffer, args.Index, args.Length))
+			{
+				using (BinaryReader reader = new BinaryReader(stream))
+				{
+					// Read switch coordinates
+					int switchX = reader.ReadInt16();
+					int switchY = reader.ReadInt16();
+
+					// Check if the player is setting up a shop
+					if (player.GetData<bool>("IsSettingUpShop"))
+					{
+						// Read other shop information
+						int itemID = player.GetData<int>("SwitchShopItemID");
+						int stackSize = player.GetData<int>("SwitchShopStackSize");
+						int shopPrice = player.GetData<int>("SwitchShopPrice");
+						byte switchStyle = reader.ReadByte();
+						int switchWorldID = Main.worldID;
+
+						// Save the switch coordinates and other information to the database
+						await bank.SaveShopToDatabase(switchX, switchY, itemID, stackSize, shopPrice, switchWorldID);
+
+						player.SendSuccessMessage("Shop successfully registered.");
+						player.RemoveData("SwitchShopItemID");
+						player.RemoveData("SwitchShopStackSize");
+						player.RemoveData("SwitchShopPrice");
+						player.RemoveData("IsSettingUpShop");
+					}
+					else
+					{
+						// Handle the switch transaction
+						await Transaction.HandleSwitchTransaction(switchX, switchY, player.Account.ID);
+					}
+				}
 			}
 		}
 	}
