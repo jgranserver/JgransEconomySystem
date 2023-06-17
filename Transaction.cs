@@ -12,6 +12,8 @@ namespace JgransEconomySystem
 		private static EconomyDatabase bank = new EconomyDatabase(path);
 		
 		public const string ReceivedFromKillingNormalNPC = "Received from killing normal NPC";
+		public const string ReceivedFromKillingSpecialNPC = "Received from killing special NPC";
+		public const string ReceivedFromKillingHostileNPC = "Received from killing hostile NPC";
 		public const string ReceivedFromPayment = "Received from payment";
 		public const string ReceivedFromKillingBossNPC = "Received from killing boss NPC";
 		public const string ReceivedFromVoting = "Received from voting the server";

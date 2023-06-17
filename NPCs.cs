@@ -1,8 +1,4 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using TShockAPI;
+using Terraria.ID;
 
 namespace JgransEconomySystem
 {
@@ -28,16 +24,12 @@ namespace JgransEconomySystem
 			NPCID.GiantWormHead,
 			NPCID.GiantWormBody,
 			NPCID.GiantWormTail,
-			NPCID.EaterofWorldsHead,
-			NPCID.EaterofWorldsBody,
-			NPCID.EaterofWorldsTail,
 			NPCID.LeechHead,
 			NPCID.LeechBody,
 			NPCID.LeechTail,
 			NPCID.SeekerHead,
 			NPCID.SeekerBody,
 			NPCID.SeekerTail,
-			NPCID.Clown,
 			NPCID.CorruptBunny,
 			NPCID.CorruptGoldfish,
 			NPCID.CorruptPenguin,
@@ -106,7 +98,6 @@ namespace JgransEconomySystem
 			NPCID.Herpling,
 			NPCID.Hornet,
 			NPCID.IceBat,
-			NPCID.IceGolem,
 			NPCID.IceSlime,
 			NPCID.IchorSticker,
 			NPCID.IlluminantBat,
@@ -122,10 +113,8 @@ namespace JgransEconomySystem
 			NPCID.MartianOfficer,
 			NPCID.MartianSaucer,
 			NPCID.MartianTurret,
-			NPCID.Mimic,
 			NPCID.MotherSlime,
 			NPCID.MushiLadybug,
-			NPCID.Paladin,
 			NPCID.Parrot,
 			NPCID.Penguin,
 			NPCID.PirateCorsair,
@@ -176,7 +165,6 @@ namespace JgransEconomySystem
 			NPCID.StardustWormTail,
 			NPCID.TacticalSkeleton,
 			NPCID.TheGroom,
-			NPCID.Tim,
 			NPCID.TombCrawlerBody,
 			NPCID.TombCrawlerHead,
 			NPCID.TombCrawlerTail,
@@ -192,7 +180,6 @@ namespace JgransEconomySystem
 			NPCID.Wraith,
 			NPCID.Zombie,
 			NPCID.ZombieEskimo,
-			NPCID.ZombieMerman,
 			NPCID.ZombieRaincoat,
 			NPCID.ZombieSuperman,
 			NPCID.ZombiePixie,
@@ -225,16 +212,74 @@ namespace JgransEconomySystem
 
 		private static readonly HashSet<int> SpecialNPCs = new HashSet<int>
 		{
-
+			NPCID.ZombieMerman,
+			NPCID.Lihzahrd,
+			NPCID.RockGolem,
+			NPCID.Lihzahrd,
+			NPCID.IceGolem,
+			NPCID.Paladin,
+			NPCID.BloodNautilus,
+			NPCID.SandsharkCrimson,
+			NPCID.BloodEelHead,
+			NPCID.WyvernHead,
+			NPCID.Werewolf,
+			NPCID.RuneWizard,
+			NPCID.Tim,
+			NPCID.Mimic,
+			NPCID.BigMimicCorruption,
+			NPCID.BigMimicCrimson,
+			NPCID.BigMimicHallow,
+			NPCID.BigMimicJungle,
+			NPCID.IceMimic,
+			NPCID.Nymph,
+			NPCID.Mothron,
+			NPCID.GoblinSummoner,
+			NPCID.PirateCaptain,
+			NPCID.Moth,
+			NPCID.Eyezor,
+			NPCID.Clown,
+			NPCID.RedDevil,
+			NPCID.VoodooDemon,
+			NPCID.GiantTortoise,
+			NPCID.IceTortoise,
+			NPCID.CultistDragonHead,
+			NPCID.MartianWalker,
+			NPCID.GrayGrunt,
+			NPCID.Nailhead,
+			NPCID.Psycho,
+			NPCID.ThePossessed,
+			NPCID.Vampire,
+			NPCID.MothronSpawn,
+			NPCID.DeadlySphere,
+			NPCID.HeadlessHorseman,
+			NPCID.Hellhound,
+			NPCID.Poltergeist,
+			NPCID.Splinterling,
+			NPCID.Yeti,
+			NPCID.Krampus,
+			NPCID.Nutcracker,
+			NPCID.ElfCopter,
+			NPCID.ElfArcher,
+			NPCID.PresentMimic,
+			NPCID.SolarCrawltipedeHead,
+			NPCID.LunarTowerNebula,
+			NPCID.LunarTowerSolar,
+			NPCID.LunarTowerStardust,
+			NPCID.LunarTowerVortex,
 		};
 
 		// NPC IDs for boss NPCs
-		private static readonly HashSet<int> BossNPCs = new HashSet<int>
+		private static readonly HashSet<int> BossNPCs1 = new HashSet<int>
 		{
 			NPCID.KingSlime,
 			NPCID.EyeofCthulhu,
 			NPCID.EaterofWorldsHead,
-			NPCID.BrainofCthulhu,
+			NPCID.BrainofCthulhu
+			// Add more boss NPCs as needed
+		};
+		
+		private static readonly HashSet<int> BossNPCs2 = new HashSet<int>
+		{
 			NPCID.QueenBee,
 			NPCID.SkeletronHead,
 			NPCID.WallofFlesh,
@@ -243,8 +288,13 @@ namespace JgransEconomySystem
 			NPCID.Retinazer,
 			NPCID.Medusa,
 			NPCID.Spazmatism,
+			// Add more boss NPCs as needed
+		};
+		
+		private static readonly HashSet<int> BossNPCs3 = new HashSet<int>
+		{
 			NPCID.Plantera,
-			NPCID.EmpressButterfly,
+			636,
 			NPCID.Golem,
 			NPCID.DukeFishron,
 			NPCID.CultistBoss,
@@ -252,19 +302,29 @@ namespace JgransEconomySystem
 			// Add more boss NPCs as needed
 		};
 
-		public static bool IsHostile(int npcId)
+		public static bool IsHostile(int npcNames)
 		{
-			return HostileNPCs.Contains(npcId);
+			return HostileNPCs.Contains(npcNames);
 		}
 
-		public static bool IsSpecial(int npcId)
+		public static bool IsSpecial(int npcNames)
 		{
-			return SpecialNPCs.Contains(npcId);
+			return SpecialNPCs.Contains(npcNames);
 		}
 
-		public static bool IsBoss(int npcId)
+		public static bool IsBoss1(int npcNames)
 		{
-			return BossNPCs.Contains(npcId);
+			return BossNPCs1.Contains(npcNames);
+		}
+		
+		public static bool IsBoss2(int npcNames)
+		{
+			return BossNPCs2.Contains(npcNames);
+		}
+		
+		public static bool IsBoss3(int npcNames)
+		{
+			return BossNPCs3.Contains(npcNames);
 		}
 	}
 }
