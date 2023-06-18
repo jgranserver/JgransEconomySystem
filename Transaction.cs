@@ -7,82 +7,91 @@ using TShockAPI;
 
 namespace JgransEconomySystem
 {
-	public static class Transaction
-	{
-		private static string path = Path.Combine(TShock.SavePath, "JgransEconomyBanks.sqlite");
-		private static EconomyDatabase bank = new EconomyDatabase(path);
+    public static class Transaction
+    {
+        private static string path = Path.Combine(TShock.SavePath, "JgransEconomyBanks.sqlite");
+        private static EconomyDatabase bank = new EconomyDatabase(path);
 
-		public const string ReceivedFromKillingNormalNPC = "Received from killing normal NPC";
-		public const string ReceivedFromKillingSpecialNPC = "Received from killing special NPC";
-		public const string ReceivedFromKillingHostileNPC = "Received from killing hostile NPC";
-		public const string ReceivedFromPayment = "Received from payment";
-		public const string ReceivedFromKillingBossNPC = "Received from killing boss NPC";
-		public const string ReceivedFromVoting = "Received from voting the server";
-		public const string PurchasedFromShop = "Bought an item from shop";
+        public const string ReceivedFromKillingNormalNPC = "Received from killing normal NPC";
+        public const string ReceivedFromKillingSpecialNPC = "Received from killing special NPC";
+        public const string ReceivedFromKillingHostileNPC = "Received from killing hostile NPC";
+        public const string ReceivedFromPayment = "Received from payment";
+        public const string ReceivedFromKillingBossNPC = "Received from killing boss NPC";
+        public const string ReceivedFromVoting = "Received from voting the server";
+        public const string PurchasedFromShop = "Bought an item from shop";
 
 
-		private static int CalculateTax(int amount, double taxRate)
-		{
-			var taxAmount = (int)Math.Ceiling(amount * taxRate);
-			return taxAmount;
-		}
+        private static int CalculateTax(int amount, double taxRate)
+        {
+            var taxAmount = (int)Math.Ceiling(amount * taxRate);
+            return taxAmount;
+        }
 
-		public static async Task ProcessTransaction(int playerId, string playerName, int amount, double taxRate)
-		{
-			var taxAmount = CalculateTax(amount, taxRate);
-			var netAmount = amount - taxAmount;
+        public static async Task ProcessTransaction(int playerId, string playerName, int amount, double taxRate)
+        {
+            var taxAmount = CalculateTax(amount, taxRate);
+            var netAmount = amount - taxAmount;
 
-			var currentBalance = await bank.GetCurrencyAmount(playerId);
-			var newBalance = currentBalance + netAmount;
+            var currentBalance = await bank.GetCurrencyAmount(playerId);
+            var newBalance = currentBalance + netAmount;
 
-			await bank.SaveCurrencyAmount(playerId, newBalance);
-			await bank.RecordTransaction(playerName, "Received from transaction", amount);
-			await bank.RecordTaxTransaction(taxAmount);
-		}
+            await bank.SaveCurrencyAmount(playerId, newBalance);
+            await bank.RecordTransaction(playerName, "Received from transaction", amount);
+            await bank.RecordTaxTransaction(taxAmount);
+        }
 
-		public static async Task HandleSwitchTransaction(int switchX, int switchY, int playerID)
-		{
-			// Retrieve the shop details from the database based on the switch coordinates
-			var shop = await bank.GetShopFromDatabase(switchX, switchY);
-			if (shop != null)
-			{
-				var itemID = shop.Item;
-				var stackSize = shop.Stack;
-				var shopPrice = shop.Price;
+        public static async Task HandleSwitchTransaction(int switchX, int switchY, int playerID)
+        {
+            // Retrieve the shop details from the database based on the switch coordinates
+            var shop = await bank.GetShopFromDatabase(switchX, switchY);
+            if (shop != null)
+            {
+                var itemID = shop.Item;
+                var stackSize = shop.Stack;
+                var shopPrice = shop.Price;
 
-				// Retrieve the player's currency amount from the database
-				var currencyAmount = await bank.GetCurrencyAmount(playerID);
+                // Retrieve the player's currency amount from the database
+                var currencyAmount = await bank.GetCurrencyAmount(playerID);
 
-				// Check if the player has enough currency to make the purchase
-				if (currencyAmount >= shopPrice)
-				{
-					var player = TShock.Players.FirstOrDefault(p => p?.Account?.ID == playerID);
-					
-					if (player != null)
-					{
-						// Perform the transaction
-						currencyAmount -= shopPrice;
-						await bank.SaveCurrencyAmount(playerID, currencyAmount);
+                // Check if the player has enough currency to make the purchase
+                if (currencyAmount >= shopPrice)
+                {
+                    var player = TShock.Players.FirstOrDefault(p => p?.Account?.ID == playerID);
+                    if (player != null)
+                    {
+                        // Calculate the resulting currency amount after the transaction
+                        var newCurrencyAmount = currencyAmount - shopPrice;
 
-						// Give the player the item stacks
-						player.GiveItem(itemID, stackSize);
+                        // Check if the resulting currency amount would be negative
+                        if (newCurrencyAmount >= 0)
+                        {
+                            // Perform the transaction
+                            await bank.SaveCurrencyAmount(playerID, newCurrencyAmount);
 
-						// Record the transaction
-						await bank.RecordTransaction(player.Name, Transaction.PurchasedFromShop, shopPrice);
+                            // Give the player the item stacks
+                            player.GiveItem(itemID, stackSize);
 
-						player.SendSuccessMessage("Purchase successful.");
-					}
-					else
-					{
-						// Player not found or not initialized correctly
-						TShock.Log.Error("Player not found or not initialized correctly for switch transaction.");
-					}
-				}
-				else
-				{
-					TShock.Players[playerID]?.SendErrorMessage("Insufficient funds to make the purchase.");
-				}
-			}
-		}
-	}
+                            // Record the transaction
+                            await bank.RecordTransaction(player.Name, Transaction.PurchasedFromShop, shopPrice);
+
+                            player.SendSuccessMessage("Purchase successful.");
+                        }
+                        else
+                        {
+                            player.SendErrorMessage("Insufficient funds to make the purchase.");
+                        }
+                    }
+                    else
+                    {
+                        // Player not found or not initialized correctly
+                        TShock.Log.Error("Player not found or not initialized correctly for switch transaction.");
+                    }
+                }
+                else
+                {
+                    TShock.Players[playerID]?.SendErrorMessage("Insufficient funds to make the purchase.");
+                }
+            }
+        }
+    }
 }

@@ -42,6 +42,7 @@ namespace JgransEconomySystem
 			ServerApi.Hooks.NetGetData.Register(this, OnNetGetData);
 			Commands.ChatCommands.Add(new Command("jgraneconomy.system", EconomyCommandsAsync, "bank"));
 			Commands.ChatCommands.Add(new Command("jgranserver.admin", SetupShopCommand, "setshop"));
+			Commands.ChatCommands.Add(new Command("jgranserver.admin", DeleteShopCommand, "delshop"));
 		}
 
 		private async void EconomyCommandsAsync(CommandArgs args)
@@ -182,6 +183,11 @@ namespace JgransEconomySystem
 		{
 			var cmd = args.Parameters;
 			var player = args.Player;
+			
+			if(cmd.Count <= 0)
+			{
+				return;
+			}
 
 			switch (cmd[0])
 			{
@@ -273,24 +279,22 @@ namespace JgransEconomySystem
 						player.SendErrorMessage("You dont have the right use this command.");
 						return;
 					}
-					if (cmd.Count == 0)
-					{
-						player.SendErrorMessage("Invalid command format. Usage: /bank resetall");
-						return;
-					}
 					player.SendMessage($"All bank accounts has been reset.", Color.LightBlue);
 					await bank.ResetAllCurrencyAmounts();
 					break;
 
 				case "help":
 				default:
-					player.SendMessage("Bank commands:", Color.LightBlue);
-					player.SendMessage("/bank bal", Color.LightBlue);
-					player.SendMessage("/bank pay", Color.LightBlue);
-					if (player.Group.HasPermission("jgranserver.admin"))
+					if (cmd.Count == 0)
 					{
-						player.SendMessage("/bank resetall", Color.LightBlue);
-						player.SendMessage("/bank check", Color.LightBlue);
+						player.SendMessage("Bank commands:", Color.LightBlue);
+						player.SendMessage("/bank bal", Color.LightBlue);
+						player.SendMessage("/bank pay", Color.LightBlue);
+						if (player.Group.HasPermission("jgranserver.admin"))
+						{
+							player.SendMessage("/bank resetall", Color.LightBlue);
+							player.SendMessage("/bank check", Color.LightBlue);
+						}
 					}
 					break;
 			}
@@ -325,6 +329,14 @@ namespace JgransEconomySystem
 			player.SetData("SwitchShopStackSize", stackSize);
 			player.SetData("SwitchShopPrice", shopPrice);
 			player.SetData("IsSettingUpShop", true);
+		}
+
+		private void DeleteShopCommand(CommandArgs args)
+		{
+			var player = args.Player;
+
+			player.SendSuccessMessage("Hit a switch to delete the shop.");
+			player.SetData("IsDeletingUpShop", true);
 		}
 
 		private void OnNetGetData(GetDataEventArgs args)
@@ -369,12 +381,28 @@ namespace JgransEconomySystem
 						player.RemoveData("SwitchShopStackSize");
 						player.RemoveData("SwitchShopPrice");
 						player.RemoveData("IsSettingUpShop");
+						return;
 					}
-					else
+
+					if (player.GetData<bool>("IsDeletingUpShop"))
 					{
-						// Handle the switch transaction
-						await Transaction.HandleSwitchTransaction(switchX, switchY, player.Account.ID);
+						var shop = bank.GetShopFromDatabase(switchX, switchY);
+						if (shop != null)
+						{
+							await bank.DeleteShopFromDatabase(switchX, switchY);
+							player.SendSuccessMessage("Shop deleted successfully.");
+						}
+						else
+						{
+							player.SendErrorMessage("Shop not found at the specified coordinates.");
+						}
+
+						player.RemoveData("IsDeletingUpShop");
+						return;
 					}
+
+					// Handle the switch transaction
+					await Transaction.HandleSwitchTransaction(switchX, switchY, player.Account.ID);
 				}
 			}
 		}
