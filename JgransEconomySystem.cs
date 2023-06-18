@@ -29,7 +29,7 @@ namespace JgransEconomySystem
 
 		public override string Name => "JgransEconomySystem";
 
-		public override Version Version => new Version(2, 0);
+		public override Version Version => new Version(2, 1);
 
 		public override string Author => "jgranserver";
 
@@ -183,15 +183,13 @@ namespace JgransEconomySystem
 			var cmd = args.Parameters;
 			var player = args.Player;
 
-			if (cmd.Count == 0)
-			{
-				player.SendErrorMessage("Command invalid.\n/bank bal = Get account balance.");
-				return;
-			}
-
 			switch (cmd[0])
 			{
 				case "bal":
+					if (cmd.Count < 1)
+					{
+						return;
+					}
 					var bal = await bank.GetCurrencyAmount(player.Account.ID);
 					player.SendMessage($"Bank Balance: [c/#00FF6E:{bal}]", Color.LightBlue);
 					break;
@@ -289,7 +287,7 @@ namespace JgransEconomySystem
 					player.SendMessage("Bank commands:", Color.LightBlue);
 					player.SendMessage("/bank bal", Color.LightBlue);
 					player.SendMessage("/bank pay", Color.LightBlue);
-					if (!player.Group.HasPermission("jgranserver.admin"))
+					if (player.Group.HasPermission("jgranserver.admin"))
 					{
 						player.SendMessage("/bank resetall", Color.LightBlue);
 						player.SendMessage("/bank check", Color.LightBlue);

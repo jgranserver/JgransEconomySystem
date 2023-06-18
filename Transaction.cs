@@ -19,7 +19,7 @@ namespace JgransEconomySystem
 		public const string ReceivedFromKillingBossNPC = "Received from killing boss NPC";
 		public const string ReceivedFromVoting = "Received from voting the server";
 		public const string PurchasedFromShop = "Bought an item from shop";
-		
+
 
 		private static int CalculateTax(int amount, double taxRate)
 		{
@@ -39,7 +39,7 @@ namespace JgransEconomySystem
 			await bank.RecordTransaction(playerName, "Received from transaction", amount);
 			await bank.RecordTaxTransaction(taxAmount);
 		}
-		
+
 		public static async Task HandleSwitchTransaction(int switchX, int switchY, int playerID)
 		{
 			// Retrieve the shop details from the database based on the switch coordinates
@@ -56,22 +56,31 @@ namespace JgransEconomySystem
 				// Check if the player has enough currency to make the purchase
 				if (currencyAmount >= shopPrice)
 				{
-					var player = TShock.Players.FirstOrDefault(p => p != null && p.Account != null && p.Account.ID.Equals(playerID));
-					// Perform the transaction
-					currencyAmount -= shopPrice;
-					await bank.SaveCurrencyAmount(playerID, currencyAmount);
+					var player = TShock.Players.FirstOrDefault(p => p?.Account?.ID == playerID);
+					
+					if (player != null)
+					{
+						// Perform the transaction
+						currencyAmount -= shopPrice;
+						await bank.SaveCurrencyAmount(playerID, currencyAmount);
 
-					// Give the player the item stacks
-					player.GiveItem(itemID, stackSize);
+						// Give the player the item stacks
+						player.GiveItem(itemID, stackSize);
 
-					// Record the transaction
-					await bank.RecordTransaction(TShock.Players[playerID].Name, Transaction.PurchasedFromShop, shopPrice);
+						// Record the transaction
+						await bank.RecordTransaction(player.Name, Transaction.PurchasedFromShop, shopPrice);
 
-					TShock.Players[playerID].SendSuccessMessage("Purchase successful.");
+						player.SendSuccessMessage("Purchase successful.");
+					}
+					else
+					{
+						// Player not found or not initialized correctly
+						TShock.Log.Error("Player not found or not initialized correctly for switch transaction.");
+					}
 				}
 				else
 				{
-					TShock.Players[playerID].SendErrorMessage("Insufficient funds to make the purchase.");
+					TShock.Players[playerID]?.SendErrorMessage("Insufficient funds to make the purchase.");
 				}
 			}
 		}
