@@ -197,7 +197,7 @@ namespace JgransEconomySystem
             command.CommandText = @"INSERT INTO TransactionData (PlayerName, Reason, Amount) 
 									VALUES (@PlayerName, @Reason, @Amount)";
             command.Parameters.AddWithValue("@PlayerName", "ServerBank");
-            command.Parameters.AddWithValue("@Reason", "Tax from transactions");
+            command.Parameters.AddWithValue("@Reason", "Tax+Sales from transactions");
             command.Parameters.AddWithValue("@Amount", amount);
 
             await command.ExecuteNonQueryAsync();

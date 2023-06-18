@@ -266,7 +266,7 @@ namespace JgransEconomySystem
 					int receiverNewBalance = receiverBalance + payment;
 					int senderNewBalance = senderBalance - payment;
 
-					await Transaction.ProcessTransaction(receiverId, receiverAccount.Name, payment, 0.2);
+					await Transaction.ProcessTransaction(receiverId, receiverAccount.Name, payment);
 					await bank.SaveCurrencyAmount(senderId, senderNewBalance);
 
 					player.SendSuccessMessage($"You have successfully paid {payment} {currencyName} to {receiverPlayer.Name}.");

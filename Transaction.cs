@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.Xna.Framework;
 using TShockAPI;
 
 namespace JgransEconomySystem
@@ -11,6 +12,8 @@ namespace JgransEconomySystem
     {
         private static string path = Path.Combine(TShock.SavePath, "JgransEconomyBanks.sqlite");
         private static EconomyDatabase bank = new EconomyDatabase(path);
+
+        private static double TaxRate => 0.2;
 
         public const string ReceivedFromKillingNormalNPC = "Received from killing normal NPC";
         public const string ReceivedFromKillingSpecialNPC = "Received from killing special NPC";
@@ -27,9 +30,9 @@ namespace JgransEconomySystem
             return taxAmount;
         }
 
-        public static async Task ProcessTransaction(int playerId, string playerName, int amount, double taxRate)
+        public static async Task ProcessTransaction(int playerId, string playerName, int amount)
         {
-            var taxAmount = CalculateTax(amount, taxRate);
+            var taxAmount = CalculateTax(amount, TaxRate);
             var netAmount = amount - taxAmount;
 
             var currentBalance = await bank.GetCurrencyAmount(playerId);
@@ -44,11 +47,15 @@ namespace JgransEconomySystem
         {
             // Retrieve the shop details from the database based on the switch coordinates
             var shop = await bank.GetShopFromDatabase(switchX, switchY);
+            var player = TShock.Players.FirstOrDefault(p => p?.Account?.ID == playerID);
+
             if (shop != null)
             {
                 var itemID = shop.Item;
                 var stackSize = shop.Stack;
                 var shopPrice = shop.Price;
+
+                var item = TShock.Utils.GetItemById(itemID);
 
                 // Retrieve the player's currency amount from the database
                 var currencyAmount = await bank.GetCurrencyAmount(playerID);
@@ -56,29 +63,33 @@ namespace JgransEconomySystem
                 // Check if the player has enough currency to make the purchase
                 if (currencyAmount >= shopPrice)
                 {
-                    var player = TShock.Players.FirstOrDefault(p => p?.Account?.ID == playerID);
                     if (player != null)
                     {
+                        var taxAmount = CalculateTax(shopPrice, TaxRate);
+                        var newBalance = currencyAmount - shopPrice - taxAmount;
                         // Calculate the resulting currency amount after the transaction
-                        var newCurrencyAmount = currencyAmount - shopPrice;
 
                         // Check if the resulting currency amount would be negative
-                        if (newCurrencyAmount >= 0)
+                        if (newBalance >= 0)
                         {
                             // Perform the transaction
-                            await bank.SaveCurrencyAmount(playerID, newCurrencyAmount);
+                            await bank.SaveCurrencyAmount(playerID, newBalance);
 
                             // Give the player the item stacks
                             player.GiveItem(itemID, stackSize);
 
                             // Record the transaction
-                            await bank.RecordTransaction(player.Name, Transaction.PurchasedFromShop, shopPrice);
+                            await bank.RecordTransaction(player.Name, Transaction.PurchasedFromShop, shopPrice + taxAmount);
+                            await bank.RecordTaxTransaction(shopPrice + taxAmount);
 
-                            player.SendSuccessMessage("Purchase successful.");
+                            player.SendSuccessMessage($"Successfully purchase {item.Name} x {stackSize} for {shopPrice + taxAmount}.");
+                            player.SendSuccessMessage($"Tax transaction applied 20% to maintain economy balance.");
+                            player.SendSuccessMessage($"Updated Balance: {newBalance}");
                         }
                         else
                         {
                             player.SendErrorMessage("Insufficient funds to make the purchase.");
+                            player.SendMessage($"Balance: {currencyAmount}", Color.LightBlue);
                         }
                     }
                     else
@@ -89,7 +100,8 @@ namespace JgransEconomySystem
                 }
                 else
                 {
-                    TShock.Players[playerID]?.SendErrorMessage("Insufficient funds to make the purchase.");
+                    player?.SendErrorMessage("Insufficient funds to make the purchase.");
+                    player?.SendMessage($"Balance: {currencyAmount}", Color.LightBlue);
                 }
             }
         }
