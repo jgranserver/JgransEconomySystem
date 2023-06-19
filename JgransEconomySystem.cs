@@ -42,7 +42,9 @@ namespace JgransEconomySystem
 			ServerApi.Hooks.NetGetData.Register(this, OnNetGetData);
 			Commands.ChatCommands.Add(new Command("jgraneconomy.system", EconomyCommandsAsync, "bank"));
 			Commands.ChatCommands.Add(new Command("jgranserver.admin", SetupShopCommand, "setshop"));
+			Commands.ChatCommands.Add(new Command("jgranserver.admin", AddAllowedGroupCommand, "shopallow"));
 			Commands.ChatCommands.Add(new Command("jgranserver.admin", DeleteShopCommand, "delshop"));
+			Rank.Initialize();
 		}
 
 		private async void EconomyCommandsAsync(CommandArgs args)
@@ -183,8 +185,8 @@ namespace JgransEconomySystem
 		{
 			var cmd = args.Parameters;
 			var player = args.Player;
-			
-			if(cmd.Count <= 0)
+
+			if (cmd.Count <= 0)
 			{
 				return;
 			}
@@ -233,6 +235,41 @@ namespace JgransEconomySystem
 					}
 
 					player.SendMessage($"{target.Name}'s Balance: {targetBal}", Color.LightBlue);
+					break;
+
+				case "give":
+					var targetPlayer = TShock.UserAccounts.GetUserAccountByName(cmd[1]);
+					var addToBalance = Convert.ToInt32(cmd[2]);
+					if (!player.Group.HasPermission("jgranserver.admin"))
+					{
+						player.SendErrorMessage("You dont have the right to add balance to other player bank accounts.");
+						return;
+					}
+
+					if (cmd.Count < 3)
+					{
+						player.SendErrorMessage("Command invalid.\n/bank give <playername> <amount>");
+						return;
+					}
+					try
+					{
+						targetIdExist = await bank.PlayerAccountExists(targetPlayer.ID);
+
+						if (!targetIdExist)
+						{
+							await bank.AddPlayerAccount(targetPlayer.ID, 0);
+							return;
+						}
+
+						targetBal = await bank.GetCurrencyAmount(targetPlayer.ID);
+						var newBalance = targetBal + addToBalance;
+						await bank.SaveCurrencyAmount(targetPlayer.ID, newBalance);
+					}
+					catch (NullReferenceException)
+					{
+						player.SendErrorMessage("Player does not have a bank account or does not exist.");
+						return;
+					}
 					break;
 
 				case "pay":
@@ -305,9 +342,9 @@ namespace JgransEconomySystem
 			var player = args.Player;
 			var parameters = args.Parameters;
 
-			if (parameters.Count < 3)
+			if (parameters.Count < 4)
 			{
-				player.SendErrorMessage("Invalid command format. Usage: /setupshop <itemID> <stack> <price>");
+				player.SendErrorMessage("Invalid command format. Usage: /setupshop <itemID> <stack> <price> <group>");
 				return;
 			}
 
@@ -319,15 +356,24 @@ namespace JgransEconomySystem
 				return;
 			}
 
+			var group = TShock.Groups.GetGroupByName(parameters[3]);
+			if (group == null)
+			{
+				player.SendErrorMessage("Group does not exist.");
+				return;
+			}
+
 			// Store the item, stack, and price values in variables for later use
 			int itemID = item;
 			int stackSize = stack;
 			int shopPrice = price;
+			string groupName = group.Name;
 
 			player.SendSuccessMessage("Hit a switch to register the shop.");
 			player.SetData("SwitchShopItemID", itemID);
 			player.SetData("SwitchShopStackSize", stackSize);
 			player.SetData("SwitchShopPrice", shopPrice);
+			player.SetData("SwitchAllowedGroup", groupName);
 			player.SetData("IsSettingUpShop", true);
 		}
 
@@ -338,6 +384,30 @@ namespace JgransEconomySystem
 			player.SendSuccessMessage("Hit a switch to delete the shop.");
 			player.SetData("IsDeletingUpShop", true);
 		}
+
+		private void AddAllowedGroupCommand(CommandArgs args)
+		{
+			var player = args.Player;
+
+			if (args.Parameters.Count == 0)
+			{
+				player.SendErrorMessage("Invalid syntax! Proper syntax: /shopallow <groupName>");
+				return;
+			}
+
+			var group = TShock.Groups.GetGroupByName(args.Parameters[0]);
+			if (group == null)
+			{
+				player.SendErrorMessage("Group does not exist.");
+				return;
+			}
+
+			string groupName = group.Name;
+			player.SendSuccessMessage("Hit a switch to add new group allowed to the shop.");
+			player.SetData("NewAllowedGroup", groupName);
+			player.SetData("AddAllowedGroup", true);
+		}
+
 
 		private void OnNetGetData(GetDataEventArgs args)
 		{
@@ -370,23 +440,59 @@ namespace JgransEconomySystem
 						int itemID = player.GetData<int>("SwitchShopItemID");
 						int stackSize = player.GetData<int>("SwitchShopStackSize");
 						int shopPrice = player.GetData<int>("SwitchShopPrice");
+						string groupName = player.GetData<string>("SwitchAllowedGroup");
 						byte switchStyle = reader.ReadByte();
 						int switchWorldID = Main.worldID;
 
 						// Save the switch coordinates and other information to the database
-						await bank.SaveShopToDatabase(switchX, switchY, itemID, stackSize, shopPrice, switchWorldID);
+						await bank.SaveShopToDatabase(switchX, switchY, itemID, stackSize, shopPrice, groupName, switchWorldID);
 
 						player.SendSuccessMessage("Shop successfully registered.");
 						player.RemoveData("SwitchShopItemID");
 						player.RemoveData("SwitchShopStackSize");
 						player.RemoveData("SwitchShopPrice");
+						player.RemoveData("SwitchAllowedGroup");
 						player.RemoveData("IsSettingUpShop");
+						return;
+					}
+
+					if (player.GetData<bool>("AddAllowedGroup"))
+					{
+						var shop = await bank.GetShopFromDatabase(switchX, switchY);
+						if (shop != null)
+						{
+							// Append the new group to the existing allowed groups
+							var allowedGroups = shop.AllowedGroup.Split(',');
+							var newGroup = player.GetData<string>("NewAllowedGroup");
+
+							if (!allowedGroups.Contains(newGroup))
+							{
+								// Add the new group to the allowed groups
+								var newAllowedGroups = allowedGroups.Append(newGroup);
+								var updatedAllowedGroups = string.Join(",", newAllowedGroups);
+
+								await bank.UpdateAllowedGroup(shop.X, shop.Y, updatedAllowedGroups);
+
+								player.SendSuccessMessage($"Successfully added group '{newGroup}' to the shop at coordinates ({shop.X}, {shop.Y}).");
+							}
+							else
+							{
+								player.SendInfoMessage($"Group '{newGroup}' is already allowed for the shop at coordinates ({shop.X}, {shop.Y}).");
+							}
+						}
+						else
+						{
+							player.SendErrorMessage($"Shop not found at coordinates ({shop.X}, {shop.Y}).");
+						}
+
+						player.RemoveData("NewAllowedGroup");
+						player.RemoveData("AddAllowedGroup");
 						return;
 					}
 
 					if (player.GetData<bool>("IsDeletingUpShop"))
 					{
-						var shop = bank.GetShopFromDatabase(switchX, switchY);
+						var shop = await bank.GetShopFromDatabase(switchX, switchY);
 						if (shop != null)
 						{
 							await bank.DeleteShopFromDatabase(switchX, switchY);
