@@ -1,18 +1,9 @@
-using System.Reflection.Emit;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using TShockAPI;
-using static TShockAPI.GetDataHandlers;
 using TerrariaApi.Server;
 using Terraria;
-using Terraria.ID;
-using TShockAPI.Hooks;
 using Microsoft.Xna.Framework;
-using Terraria.Localization;
 using TShockAPI.DB;
-using System.Diagnostics;
+using System.IO.Streams;
 
 namespace JgransEconomySystem
 {
@@ -29,7 +20,7 @@ namespace JgransEconomySystem
 
 		public override string Name => "JgransEconomySystem";
 
-		public override Version Version => new Version(2, 1);
+		public override Version Version => new Version(2, 2);
 
 		public override string Author => "jgranserver";
 
@@ -65,8 +56,21 @@ namespace JgransEconomySystem
 
 		protected override void Dispose(bool disposing)
 		{
+			if (disposing)
+			{
+				ServerApi.Hooks.NetSendData.Deregister(this, EconomyAsync);
+				ServerApi.Hooks.NetGetData.Deregister(this, OnNetGetData);
+
+			}
 			base.Dispose(disposing);
 		}
+
+		private static readonly int LowRate = 30;
+		private static readonly int MedRate = 50;
+		private static readonly int HighRate = 85;
+		private static readonly int PerfectRate = 100;
+
+		bool spawned = false;
 
 		private async Task Economy(SendDataEventArgs args)
 		{
@@ -84,27 +88,22 @@ namespace JgransEconomySystem
 				// No players found with the specified name or ID
 				return;
 			}
+			
+			if (npcIndex >= Main.npc.Length || npcIndex < 0)
+			{
+				return;
+			}
 
 			var player = players[0];
+			var npc = Main.npc[npcIndex];
 
 			switch (data)
 			{
 				case PacketTypes.NpcStrike:
-					if (npcIndex >= Main.npc.Length || npcIndex < 0)
-					{
-						return;
-					}
-
-					var npc = Main.npc[npcIndex];
 					if (npc == null || npc.life > 0)
 					{
 						return;
 					}
-
-					int lowRate = 30;
-					int medRate = 20;
-					int highRate = 35;
-					int perfectRate = 15;
 
 					bool isHostile = NPCType.IsHostile(npc.netID);
 					bool isSpecial = NPCType.IsSpecial(npc.netID);
@@ -116,37 +115,39 @@ namespace JgransEconomySystem
 					int currencyAmount = 0;
 					string reason = "";
 
-					switch (npc.netID)
+					if (isBoss3 && spawned && randomizer <= PerfectRate)
 					{
-						case int id when isBoss3 && randomizer <= lowRate + medRate + highRate + perfectRate:
-							currencyAmount = Main.rand.Next(1000);
-							reason = Transaction.ReceivedFromKillingBossNPC;
-							break;
+						currencyAmount = Main.rand.Next(1000);
+						reason = Transaction.ReceivedFromKillingBossNPC;
+						spawned = false;
+					}
+					else if (isBoss2 && spawned && randomizer <= PerfectRate)
+					{
+						currencyAmount = Main.rand.Next(600);
+						reason = Transaction.ReceivedFromKillingBossNPC;
+						spawned = false;
+					}
+					else if (isBoss1 && spawned && randomizer <= PerfectRate)
+					{
+						currencyAmount = Main.rand.Next(380);
+						reason = Transaction.ReceivedFromKillingBossNPC;
+						spawned = false;
+					}
 
-						case int id when isBoss2 && randomizer <= lowRate + medRate + highRate + perfectRate:
-							currencyAmount = Main.rand.Next(600);
-							reason = Transaction.ReceivedFromKillingBossNPC;
-							break;
-
-						case int id when isBoss1 && randomizer <= lowRate + medRate + highRate + perfectRate:
-							currencyAmount = Main.rand.Next(380);
-							reason = Transaction.ReceivedFromKillingBossNPC;
-							break;
-
-						case int id when isSpecial && randomizer <= lowRate + medRate + highRate:
-							currencyAmount = Main.rand.Next(50);
-							reason = Transaction.ReceivedFromKillingSpecialNPC;
-							break;
-
-						case int id when isHostile && randomizer <= lowRate + medRate:
-							currencyAmount = Main.rand.Next(15);
-							reason = Transaction.ReceivedFromKillingHostileNPC;
-							break;
-
-						case int id when !(isHostile || isSpecial || isBoss1 || isBoss2 || isBoss3) && randomizer <= lowRate:
-							currencyAmount = Main.rand.Next(3);
-							reason = Transaction.ReceivedFromKillingNormalNPC;
-							break;
+					else if (isSpecial && randomizer <= HighRate)
+					{
+						currencyAmount = Main.rand.Next(80);
+						reason = Transaction.ReceivedFromKillingSpecialNPC;
+					}
+					else if (isHostile && randomizer <= MedRate)
+					{
+						currencyAmount = Main.rand.Next(30);
+						reason = Transaction.ReceivedFromKillingHostileNPC;
+					}
+					else if (!(isHostile || isSpecial || isBoss1 || isBoss2 || isBoss3) && randomizer <= LowRate)
+					{
+						currencyAmount = Main.rand.Next(10);
+						reason = Transaction.ReceivedFromKillingNormalNPC;
 					}
 
 					if (currencyAmount > 0)
@@ -178,8 +179,6 @@ namespace JgransEconomySystem
 					return;
 			}
 		}
-
-
 
 		public async Task EconomyCommands(CommandArgs args)
 		{
@@ -238,38 +237,38 @@ namespace JgransEconomySystem
 					break;
 
 				case "give":
-					var targetPlayer = TShock.UserAccounts.GetUserAccountByName(cmd[1]);
-					var addToBalance = Convert.ToInt32(cmd[2]);
-					if (!player.Group.HasPermission("jgranserver.admin"))
-					{
-						player.SendErrorMessage("You dont have the right to add balance to other player bank accounts.");
-						return;
-					}
-
 					if (cmd.Count < 3)
 					{
 						player.SendErrorMessage("Command invalid.\n/bank give <playername> <amount>");
 						return;
 					}
-					try
-					{
-						targetIdExist = await bank.PlayerAccountExists(targetPlayer.ID);
 
-						if (!targetIdExist)
-						{
-							await bank.AddPlayerAccount(targetPlayer.ID, 0);
-							return;
-						}
-
-						targetBal = await bank.GetCurrencyAmount(targetPlayer.ID);
-						var newBalance = targetBal + addToBalance;
-						await bank.SaveCurrencyAmount(targetPlayer.ID, newBalance);
-					}
-					catch (NullReferenceException)
+					if (!player.Group.HasPermission("jgranserver.admin"))
 					{
-						player.SendErrorMessage("Player does not have a bank account or does not exist.");
+						player.SendErrorMessage("You don't have the right to add balance to other players' bank accounts.");
 						return;
 					}
+
+					var targetPlayerName = cmd[1];
+					var addToBalance = Convert.ToInt32(cmd[2]);
+
+					var targetPlayer = TShock.UserAccounts.GetUserAccountByName(targetPlayerName);
+					if (targetPlayer == null)
+					{
+						player.SendErrorMessage("Player does not exist.");
+						return;
+					}
+
+					var targetIdExistGive = await bank.PlayerAccountExists(targetPlayer.ID);
+					if (!targetIdExistGive)
+					{
+						await bank.AddPlayerAccount(targetPlayer.ID, 0);
+					}
+
+					var targetBalGive = await bank.GetCurrencyAmount(targetPlayer.ID);
+					var newBalance = targetBalGive + addToBalance;
+					player.SendInfoMessage($"Successfully added {addToBalance} to the account of {targetPlayer.Name}");
+					await bank.SaveCurrencyAmount(targetPlayer.ID, newBalance);
 					break;
 
 				case "pay":
@@ -391,20 +390,27 @@ namespace JgransEconomySystem
 
 			if (args.Parameters.Count == 0)
 			{
-				player.SendErrorMessage("Invalid syntax! Proper syntax: /shopallow <groupName>");
+				player.SendErrorMessage("Invalid syntax! Proper syntax: /shopallow <rank1> <rank2> <rank3> ...");
 				return;
 			}
 
-			var group = TShock.Groups.GetGroupByName(args.Parameters[0]);
-			if (group == null)
+			List<string> allowedGroups = new List<string>();
+
+			foreach (var rankName in args.Parameters)
 			{
-				player.SendErrorMessage("Group does not exist.");
-				return;
+				var group = TShock.Groups.GetGroupByName(rankName);
+				if (group == null)
+				{
+					player.SendErrorMessage($"Group '{rankName}' does not exist.");
+					return;
+				}
+				allowedGroups.Add(group.Name);
 			}
 
-			string groupName = group.Name;
 			player.SendSuccessMessage("Hit a switch to add new group allowed to the shop.");
-			player.SetData("NewAllowedGroup", groupName);
+
+			var allowedGroupsJson = Newtonsoft.Json.JsonConvert.SerializeObject(allowedGroups);
+			player.SetData("NewAllowedGroup", allowedGroupsJson);
 			player.SetData("AddAllowedGroup", true);
 		}
 
@@ -421,6 +427,17 @@ namespace JgransEconomySystem
 					HandleHitSwitchPacket(player, args);
 				}
 			}
+
+			if (args.MsgID == PacketTypes.SpawnBossorInvasion)
+			{
+				spawned = BossSpawned();
+				TSPlayer.All.SendInfoMessage("Reward Counter Set to 1");
+			}
+		}
+
+		public bool BossSpawned()
+		{
+			return true;
 		}
 
 		private async void HandleHitSwitchPacket(TSPlayer player, GetDataEventArgs args)
@@ -463,26 +480,30 @@ namespace JgransEconomySystem
 						{
 							// Append the new group to the existing allowed groups
 							var allowedGroups = shop.AllowedGroup.Split(',');
-							var newGroup = player.GetData<string>("NewAllowedGroup");
+							var newGroupsJson = player.GetData<string>("NewAllowedGroup");
+							var newGroups = Newtonsoft.Json.JsonConvert.DeserializeObject<List<string>>(newGroupsJson);
 
-							if (!allowedGroups.Contains(newGroup))
+							foreach (var newGroup in newGroups)
 							{
-								// Add the new group to the allowed groups
-								var newAllowedGroups = allowedGroups.Append(newGroup);
-								var updatedAllowedGroups = string.Join(",", newAllowedGroups);
+								if (!allowedGroups.Contains(newGroup))
+								{
+									// Add the new group to the allowed groups
+									allowedGroups = allowedGroups.Append(newGroup).ToArray();
+									var updatedAllowedGroups = string.Join(",", allowedGroups);
 
-								await bank.UpdateAllowedGroup(shop.X, shop.Y, updatedAllowedGroups);
+									await bank.UpdateAllowedGroup(shop.X, shop.Y, updatedAllowedGroups);
 
-								player.SendSuccessMessage($"Successfully added group '{newGroup}' to the shop at coordinates ({shop.X}, {shop.Y}).");
-							}
-							else
-							{
-								player.SendInfoMessage($"Group '{newGroup}' is already allowed for the shop at coordinates ({shop.X}, {shop.Y}).");
+									player.SendSuccessMessage($"Successfully added group '{newGroup}' to the shop at coordinates ({shop.X}, {shop.Y}).");
+								}
+								else
+								{
+									player.SendInfoMessage($"Group '{newGroup}' is already allowed for the shop at coordinates ({shop.X}, {shop.Y}).");
+								}
 							}
 						}
 						else
 						{
-							player.SendErrorMessage($"Shop not found at coordinates ({shop.X}, {shop.Y}).");
+							player.SendErrorMessage($"Shop not found at coordinates ({switchX}, {switchY}).");
 						}
 
 						player.RemoveData("NewAllowedGroup");

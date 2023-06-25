@@ -206,12 +206,18 @@ namespace JgransEconomySystem
 			NPCID.SleepyEye,
 			NPCID.DialatedEye,
 			NPCID.GreenEye,
-			NPCID.PurpleEye
+			NPCID.PurpleEye,
+			NPCID.DD2GoblinBomberT1,
+			NPCID.DD2GoblinT1,
+			NPCID.DD2SkeletonT1,
+			NPCID.DD2JavelinstT1
 			// Add more hostile NPCs as needed
 		};
 
 		private static readonly HashSet<int> SpecialNPCs = new HashSet<int>
 		{
+			NPCID.EaterofWorldsBody,
+			NPCID.EaterofWorldsHead,
 			NPCID.ZombieMerman,
 			NPCID.Lihzahrd,
 			NPCID.RockGolem,
@@ -266,6 +272,13 @@ namespace JgransEconomySystem
 			NPCID.LunarTowerSolar,
 			NPCID.LunarTowerStardust,
 			NPCID.LunarTowerVortex,
+			NPCID.DD2DrakinT2,
+			NPCID.DD2GoblinT2,
+			NPCID.DD2JavelinstT2,
+			NPCID.DD2WyvernT2,
+			NPCID.DD2KoboldFlyerT2,
+			NPCID.DD2WitherBeastT2,
+			NPCID.DD2KoboldWalkerT2
 		};
 
 		// NPC IDs for boss NPCs
@@ -273,8 +286,9 @@ namespace JgransEconomySystem
 		{
 			NPCID.KingSlime,
 			NPCID.EyeofCthulhu,
-			NPCID.EaterofWorldsHead,
-			NPCID.BrainofCthulhu
+			NPCID.EaterofWorldsTail,
+			NPCID.BrainofCthulhu,
+			NPCID.DD2DarkMageT1
 			// Add more boss NPCs as needed
 		};
 		
@@ -283,6 +297,10 @@ namespace JgransEconomySystem
 			NPCID.QueenBee,
 			NPCID.SkeletronHead,
 			NPCID.WallofFlesh,
+			NPCID.DD2Betsy,
+			NPCID.DD2OgreT2,
+			NPCID.DD2OgreT3,
+			NPCID.DD2DarkMageT3,
 			NPCID.TheDestroyer,
 			NPCID.SkeletronPrime,
 			NPCID.Retinazer,
@@ -293,6 +311,7 @@ namespace JgransEconomySystem
 		
 		private static readonly HashSet<int> BossNPCs3 = new HashSet<int>
 		{
+			NPCID.DD2Betsy,
 			NPCID.Plantera,
 			636,
 			NPCID.Golem,
