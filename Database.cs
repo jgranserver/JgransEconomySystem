@@ -64,6 +64,18 @@ namespace JgransEconomySystem
 											)";
 				await rankCommand.ExecuteNonQueryAsync();
 
+				using var sellCommand = connection.CreateCommand();
+				sellCommand.CommandText = @"
+					CREATE TABLE IF NOT EXISTS CommandShop (
+						ID INTEGER PRIMARY KEY AUTOINCREMENT,
+						X INTEGER,
+						Y INTEGER,
+						Command TEXT NOT NULL,
+						Price INTEGER NOT NULL,
+						AllowedGroup TEXT,
+						WorldID INTEGER
+					)";
+				await sellCommand.ExecuteNonQueryAsync();
 			}
 		}
 
@@ -222,6 +234,7 @@ namespace JgransEconomySystem
 			public int Y { get; set; }
 			public int Item { get; set; }
 			public int Stack { get; set; }
+			public string Command { get; set; }
 			public int Price { get; set; }
 			public string AllowedGroup { get; set; }
 			public int WorldID { get; set; }
@@ -249,77 +262,181 @@ namespace JgransEconomySystem
 
 
 
-		public async Task<ShopItem> GetShopFromDatabase(int switchX, int switchY)
+		public async Task<ShopItem> GetShopFromDatabase(int switchX, int switchY, bool switchShop, bool sellCommand)
 		{
-			using (var connection = new SqliteConnection(connectionString))
+			if (switchShop)
 			{
-				await connection.OpenAsync();
-
-				var selectCommand = "SELECT * FROM SwitchShop WHERE X = @X AND Y = @Y LIMIT 1";
-
-				using (var command = new SqliteCommand(selectCommand, connection))
+				using (var connection = new SqliteConnection(connectionString))
 				{
-					command.Parameters.AddWithValue("@X", switchX);
-					command.Parameters.AddWithValue("@Y", switchY);
+					await connection.OpenAsync();
 
-					using (var reader = await command.ExecuteReaderAsync())
+					var selectCommand = "SELECT * FROM SwitchShop WHERE X = @X AND Y = @Y LIMIT 1";
+
+					using (var command = new SqliteCommand(selectCommand, connection))
 					{
-						if (reader.Read())
-						{
-							var shop = new ShopItem
-							{
-								Id = reader.GetInt32(0),
-								X = reader.GetInt32(1),
-								Y = reader.GetInt32(2),
-								Item = reader.GetInt32(3),
-								Stack = reader.GetInt32(4),
-								Price = reader.GetInt32(5),
-								AllowedGroup = reader.GetString(6),
-								WorldID = reader.GetInt32(7)
-							};
+						command.Parameters.AddWithValue("@X", switchX);
+						command.Parameters.AddWithValue("@Y", switchY);
 
-							return shop;
+						using (var reader = await command.ExecuteReaderAsync())
+						{
+							if (reader.Read())
+							{
+								var shop = new ShopItem
+								{
+									Id = reader.GetInt32(0),
+									X = reader.GetInt32(1),
+									Y = reader.GetInt32(2),
+									Item = reader.GetInt32(3),
+									Stack = reader.GetInt32(4),
+									Price = reader.GetInt32(5),
+									AllowedGroup = reader.GetString(6),
+									WorldID = reader.GetInt32(7)
+								};
+
+								return shop;
+							}
 						}
 					}
 				}
 			}
+			
+			if(sellCommand)
+			{
+				using (var connection = new SqliteConnection(connectionString))
+				{
+					await connection.OpenAsync();
 
+					var selectCommand = "SELECT * FROM CommandShop WHERE X = @X AND Y = @Y LIMIT 1";
+
+					using (var command = new SqliteCommand(selectCommand, connection))
+					{
+						command.Parameters.AddWithValue("@X", switchX);
+						command.Parameters.AddWithValue("@Y", switchY);
+
+						using (var reader = await command.ExecuteReaderAsync())
+						{
+							if (reader.Read())
+							{
+								var shop = new ShopItem
+								{
+									Id = reader.GetInt32(0),
+									X = reader.GetInt32(1),
+									Y = reader.GetInt32(2),
+									Command = reader.GetString(3),
+									Price = reader.GetInt32(4),
+									AllowedGroup = reader.IsDBNull(5) ? null : reader.GetString(5),
+									WorldID = reader.GetInt32(6)
+								};
+
+								return shop;
+							}
+						}
+					}
+				}
+			}
 			return null;
 		}
 
-		public async Task UpdateAllowedGroup(int switchX, int switchY, string updatedAllowedGroups)
+		public async Task UpdateAllowedGroup(int switchX, int switchY, string updatedAllowedGroups, bool switchShop, bool sellCommand)
 		{
-			using (var connection = new SqliteConnection(connectionString))
+			if (switchShop)
 			{
-				await connection.OpenAsync();
+				using (var connection = new SqliteConnection(connectionString))
+				{
+					await connection.OpenAsync();
 
-				var updateCommand = @"UPDATE SwitchShop 
+					var updateCommand = @"UPDATE SwitchShop 
 							  SET AllowedGroup = @UpdatedAllowedGroups 
 							  WHERE X = @SwitchX AND Y = @SwitchY";
 
-				using (var command = new SqliteCommand(updateCommand, connection))
+					using (var command = new SqliteCommand(updateCommand, connection))
+					{
+						command.Parameters.AddWithValue("@UpdatedAllowedGroups", updatedAllowedGroups);
+						command.Parameters.AddWithValue("@SwitchX", switchX);
+						command.Parameters.AddWithValue("@SwitchY", switchY);
+						await command.ExecuteNonQueryAsync();
+					}
+				}
+			}
+			
+			if (sellCommand)
+			{
+				using (var connection = new SqliteConnection(connectionString))
 				{
-					command.Parameters.AddWithValue("@UpdatedAllowedGroups", updatedAllowedGroups);
-					command.Parameters.AddWithValue("@SwitchX", switchX);
-					command.Parameters.AddWithValue("@SwitchY", switchY);
-					await command.ExecuteNonQueryAsync();
+					await connection.OpenAsync();
+
+					var updateCommand = @"UPDATE CommandShop 
+							  SET AllowedGroup = @UpdatedAllowedGroups 
+							  WHERE X = @SwitchX AND Y = @SwitchY";
+
+					using (var command = new SqliteCommand(updateCommand, connection))
+					{
+						command.Parameters.AddWithValue("@UpdatedAllowedGroups", updatedAllowedGroups);
+						command.Parameters.AddWithValue("@SwitchX", switchX);
+						command.Parameters.AddWithValue("@SwitchY", switchY);
+						await command.ExecuteNonQueryAsync();
+					}
 				}
 			}
 		}
 
-		public async Task DeleteShopFromDatabase(int switchX, int switchY)
+		public async Task DeleteShopFromDatabase(int switchX, int switchY, bool switchShop, bool sellCommand)
+		{
+			if (switchShop)
+			{
+				using (var connection = new SqliteConnection(connectionString))
+				{
+					await connection.OpenAsync();
+
+					var deleteCommand = "DELETE FROM SwitchShop WHERE X = @X AND Y = @Y";
+
+					using (var command = new SqliteCommand(deleteCommand, connection))
+					{
+						command.Parameters.AddWithValue("@X", switchX);
+						command.Parameters.AddWithValue("@Y", switchY);
+						await command.ExecuteNonQueryAsync();
+					}
+				}
+			}
+			
+			if (sellCommand)
+			{
+				using (var connection = new SqliteConnection(connectionString))
+				{
+					await connection.OpenAsync();
+
+					var deleteCommand = "DELETE FROM CommandShop WHERE X = @X AND Y = @Y";
+
+					using (var command = new SqliteCommand(deleteCommand, connection))
+					{
+						command.Parameters.AddWithValue("@X", switchX);
+						command.Parameters.AddWithValue("@Y", switchY);
+						await command.ExecuteNonQueryAsync();
+					}
+				}
+			}
+		}
+
+		public async Task AddCommandToShop(int switchX, int switchY, string command, int price, string groupName, int worldID)
 		{
 			using (var connection = new SqliteConnection(connectionString))
 			{
-				await connection.OpenAsync();
+				connection.Open();
 
-				var deleteCommand = "DELETE FROM SwitchShop WHERE X = @X AND Y = @Y";
+				var insertCommand = @"
+			INSERT INTO CommandShop (X, Y, Command, Price, AllowedGroup, WorldID)
+			VALUES (@X, @Y, @Command, @Price, @AllowedGroup, @WorldID)";
 
-				using (var command = new SqliteCommand(deleteCommand, connection))
+				using (var addCommand = new SqliteCommand(insertCommand, connection))
 				{
-					command.Parameters.AddWithValue("@X", switchX);
-					command.Parameters.AddWithValue("@Y", switchY);
-					await command.ExecuteNonQueryAsync();
+					addCommand.Parameters.AddWithValue("@X", switchX);
+					addCommand.Parameters.AddWithValue("@Y", switchY);
+					addCommand.Parameters.AddWithValue("@Command", command);
+					addCommand.Parameters.AddWithValue("@Price", price);
+					addCommand.Parameters.AddWithValue("@AllowedGroup", groupName);
+					addCommand.Parameters.AddWithValue("@WorldID", worldID);
+
+					await addCommand.ExecuteNonQueryAsync();
 				}
 			}
 		}

@@ -38,54 +38,62 @@ namespace JgransEconomySystem
             await bank.RecordTaxTransaction(taxAmount);
         }
 
-        public static async Task HandleSwitchTransaction(int switchX, int switchY, int playerID)
+        public static async Task HandleSwitchTransaction(int switchX, int switchY, int playerID, bool itemShop, bool sellCommand)
         {
             // Retrieve the shop details from the database based on the switch coordinates
-            var shop = await bank.GetShopFromDatabase(switchX, switchY);
-            var player = TShock.Players.FirstOrDefault(p => p?.Account?.ID == playerID);
-
-            if (shop != null && player != null)
+            if (itemShop)
             {
-                var allowedGroups = shop.AllowedGroup.Split(',');
+                var itemShops = await bank.GetShopFromDatabase(switchX, switchY, true, false);
+                var player = TShock.Players.FirstOrDefault(p => p?.Account?.ID == playerID);
 
-                if (!allowedGroups.Contains(player.Group.Name))
+                if (itemShops != null && player != null)
                 {
-                    player.SendErrorMessage("Your rank is not allowed to purchase this item.");
-                    player.SendErrorMessage("Allowed ranks: " + string.Join(", ", allowedGroups));
-                    return;
-                }
+                    var allowedGroups = itemShops.AllowedGroup.Split(',');
 
-                var itemID = shop.Item;
-                var stackSize = shop.Stack;
-                var shopPrice = shop.Price;
-
-                var item = TShock.Utils.GetItemById(itemID);
-
-                // Retrieve the player's currency amount from the database
-                var currencyAmount = await bank.GetCurrencyAmount(playerID);
-
-                // Check if the player has enough currency to make the purchase
-                if (currencyAmount >= shopPrice)
-                {
-                    var taxAmount = CalculateTax(shopPrice);
-                    var newBalance = currencyAmount - shopPrice - taxAmount;
-
-                    // Check if the resulting currency amount would be negative
-                    if (newBalance >= 0)
+                    if (!allowedGroups.Contains(player.Group.Name))
                     {
-                        // Perform the transaction
-                        await bank.SaveCurrencyAmount(playerID, newBalance);
+                        player.SendErrorMessage("Your rank is not allowed to purchase this item.");
+                        player.SendErrorMessage("Allowed ranks: " + string.Join(", ", allowedGroups));
+                        return;
+                    }
 
-                        // Give the player the item stacks
-                        player.GiveItem(itemID, stackSize);
+                    var itemID = itemShops.Item;
+                    var stackSize = itemShops.Stack;
+                    var shopPrice = itemShops.Price;
 
-                        // Record the transaction
-                        await bank.RecordTransaction(player.Name, Transaction.PurchasedFromShop, shopPrice + taxAmount);
-                        await bank.RecordTaxTransaction(shopPrice + taxAmount);
+                    var item = TShock.Utils.GetItemById(itemID);
 
-                        player.SendSuccessMessage($"Successfully purchased {item.Name} x {stackSize} for {shopPrice + taxAmount}.");
-                        player.SendSuccessMessage("Tax transaction applied: 20% to maintain economy balance.");
-                        player.SendSuccessMessage($"Updated Balance: {newBalance}");
+                    // Retrieve the player's currency amount from the database
+                    var currencyAmount = await bank.GetCurrencyAmount(playerID);
+
+                    // Check if the player has enough currency to make the purchase
+                    if (currencyAmount >= shopPrice)
+                    {
+                        var taxAmount = CalculateTax(shopPrice);
+                        var newBalance = currencyAmount - shopPrice - taxAmount;
+
+                        // Check if the resulting currency amount would be negative
+                        if (newBalance >= 0)
+                        {
+                            // Perform the transaction
+                            await bank.SaveCurrencyAmount(playerID, newBalance);
+
+                            // Give the player the item stacks
+                            player.GiveItem(itemID, stackSize);
+
+                            // Record the transaction
+                            await bank.RecordTransaction(player.Name, Transaction.PurchasedFromShop, shopPrice + taxAmount);
+                            await bank.RecordTaxTransaction(shopPrice + taxAmount);
+
+                            player.SendSuccessMessage($"Successfully purchased {item.Name} x {stackSize} for {shopPrice + taxAmount}.");
+                            player.SendSuccessMessage("Tax transaction applied: 20% to maintain economy balance.");
+                            player.SendSuccessMessage($"Updated Balance: {newBalance}");
+                        }
+                        else
+                        {
+                            player.SendErrorMessage("Insufficient funds to make the purchase.");
+                            player.SendMessage($"Balance: {currencyAmount}", Color.LightBlue);
+                        }
                     }
                     else
                     {
@@ -93,12 +101,77 @@ namespace JgransEconomySystem
                         player.SendMessage($"Balance: {currencyAmount}", Color.LightBlue);
                     }
                 }
-                else
+            }
+
+            if (sellCommand)
+            {
+                var commandShops = await bank.GetShopFromDatabase(switchX, switchY, false, true);
+                var player = TShock.Players.FirstOrDefault(p => p?.Account?.ID == playerID);
+
+                if (commandShops != null && player != null)
                 {
-                    player.SendErrorMessage("Insufficient funds to make the purchase.");
-                    player.SendMessage($"Balance: {currencyAmount}", Color.LightBlue);
+                    var allowedGroups = commandShops.AllowedGroup.Split(',');
+
+                    if (!allowedGroups.Contains(player.Group.Name))
+                    {
+                        player.SendErrorMessage("Your rank is not allowed to purchase this item.");
+                        player.SendErrorMessage("Allowed ranks: " + string.Join(", ", allowedGroups));
+                        return;
+                    }
+
+                    var command = commandShops.Command;
+                    var price = commandShops.Price;
+
+                    var currencyAmount = await bank.GetCurrencyAmount(playerID);
+
+                    if (currencyAmount >= price)
+                    {
+                        var taxAmount = CalculateTax(price);
+                        var newBalance = currencyAmount - price - taxAmount;
+
+                        // Check if the resulting currency amount would be negative
+                        if (newBalance >= 0)
+                        {
+                            // Perform the transaction
+                            await bank.SaveCurrencyAmount(playerID, newBalance);
+
+                            var originalGroup = player.Group.ToString();
+
+                            // Temporarily set the player's group to a group with the necessary permissions
+                            TShock.UserAccounts.SetUserGroup(player.Account, "superadmin");
+
+                            try
+                            {
+                                // Execute the command
+                                Commands.HandleCommand(player, command);
+                            }
+                            finally
+                            {
+                                // Restore the player's original group
+                                TShock.UserAccounts.SetUserGroup(player.Account, originalGroup);
+                            }
+
+                            // Record the transaction
+                            await bank.RecordTransaction(player.Name, Transaction.PurchasedFromShop, price + taxAmount);
+                            await bank.RecordTaxTransaction(price + taxAmount);
+
+                            player.SendSuccessMessage("Tax transaction applied: 20% to maintain economy balance.");
+                            player.SendSuccessMessage($"Updated Balance: {newBalance}");
+                        }
+                        else
+                        {
+                            player.SendErrorMessage("Insufficient funds to make the purchase.");
+                            player.SendMessage($"Balance: {currencyAmount}", Color.LightBlue);
+                        }
+                    }
+                    else
+                    {
+                        player.SendErrorMessage("Insufficient funds to make the purchase.");
+                        player.SendMessage($"Balance: {currencyAmount}", Color.LightBlue);
+                    }
                 }
             }
+
             else
             {
                 // Shop not found or player not found or not initialized correctly
