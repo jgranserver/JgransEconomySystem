@@ -53,19 +53,27 @@ The plugin uses a SQLite database to store player account information and shop d
 
 ## Commands
 
-- `/bank` - Displays the player's currency balance.
-- `/setshop` - Sets up a shop at the player's current location using a switch mechanism.
-- `/shopallow` - Adds a group to the allowed groups for a shop.
-- `/delshop` - Deletes a shop at the player's current location.
-- `/delcommandshop` - Deletes a command shop at the player's current location.
-- `/sellcommand` - Sets up a command shop at the player's current location.
-- `/rankadd` - Adds a new rank.
-- `/rankdel` - Deletes a rank.
-- `/ranknext` - Updates the next rank for a rank.
-- `/rankcost` - Updates the required currency amount for a rank.
-- `/rankdown` - Moves a player down to a lower rank.
-- `/ranks` - Displays a list of all rank names.
-- `/rankup` - Promotes a player to the next rank.
+### General Commands
+
+- `/bank` - Displays the bank commands.
+
+### Shop Commands
+
+- `/setshop` - Sets up a shop after executing the command properly and hitting a switch button. (Permission: jgranserver.admin)
+- `/sellcommand` - Sets up a command shop after executing the command properly and hitting a switch button. (Permission: jgranserver.admin)
+- `/shopallow` - Adds a group to the allowed groups for a shop after executing and hitting the switch button. (Permission: jgranserver.admin)
+- `/delshop` - Deletes a shop at the specified switch location if a shop is already available. (Permission: jgranserver.admin)
+- `/delcommandshop` - Deletes a command shop at the specified switch location if a shop is already available. (Permission: jgranserver.admin)
+
+### Rank Commands
+
+- `/rankadd` - Adds a new rank. (Permission: jgranserver.admin)
+- `/rankdel` - Deletes a rank. (Permission: jgranserver.admin)
+- `/ranknext` - Updates the next rank of a rank. (Permission: jgranserver.admin)
+- `/rankcost` - Updates the required currency amount for a rank. (Permission: jgranserver.admin)
+- `/rankdown` - Moves a group of players in a rank to the specified rank. (Permission: jgranserver.admin)
+- `/ranks` - Displays a list of all rank names. (Permission: jgraneconomy.system)
+- `/rankup` - Promotes a player to the next rank. (Permission: jgraneconomy.system)
 
 Refer to the in-game command descriptions for more information on how to use each command.
 
