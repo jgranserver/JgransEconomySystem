@@ -82,6 +82,7 @@ namespace JgransEconomySystem
 
 		private async Task Economy(SendDataEventArgs args)
 		{
+			config = new JgransEconomySystemConfig();
 			var data = args.MsgId;
 			var npcIndex = args.number;
 
