@@ -8,7 +8,7 @@ JgransEconomySystem is a plugin for Terraria that provides an economy system for
 - Player accounts: Each player has their own currency balance.
 - Shops: Set up shops using switch mechanisms where players can buy item.
 - Command shops: Create shops using commands as the item to be sold.
-- Rank-based rewards: Define ranks and set rewards based on currency amount.
+- Rank-based rewards: Define ranks and permissions earned for each ranks.
 - Configurable: Customize various aspects of the plugin through the configuration file.
 
 ## Building the Plugin
@@ -27,6 +27,25 @@ To build the plugin from source code, follow these steps:
 ## Configuration
 
 The plugin uses a configuration file to customize its behavior. The configuration file is named `JgransEconomySystemConfig.json` and should be placed in the server's `tshock` folder. Modify the settings in the configuration file to suit your server's needs.
+
+## Configuration
+
+The plugin uses a configuration file (`JgransEconomySystemConfig.json`) to customize its behavior. The following settings can be modified in the configuration file:
+
+- `CurrencyName` (default: "jspoints"): The name of the currency used in the economy system.
+- `ServerName` (default: "Jgrans"): The name of your server.
+- `LowRate` (default: 30): The currency rate for low-tier rewards.
+- `MedRate` (default: 50): The currency rate for medium-tier rewards.
+- `HighRate` (default: 85): The currency rate for high-tier rewards.
+- `PerfectRate` (default: 100): The currency rate for perfect rewards.
+- `Boss3MaxAmount` (default: 1000): The maximum currency amount obtainable from defeating the third set boss (Plantera up).
+- `Boss2MaxAmount` (default: 600): The maximum currency amount obtainable from defeating the second set boss (Wall of Flesh up).
+- `Boss1MaxAmount` (default: 380): The maximum currency amount obtainable from defeating the first boss (Pre-Hardmode Bosses).
+- `SpecialMaxAmount` (default: 80): The maximum currency amount obtainable from special events or achievements.
+- `HostileMaxAmount` (default: 50): The maximum currency amount obtainable from hostile creatures.
+- `NormalMaxAmount` (default: 25): The maximum currency amount obtainable from regular gameplay.
+
+Modify these settings to adjust the currency rates and maximum amounts according to your server's needs.
 
 ## Database
 
