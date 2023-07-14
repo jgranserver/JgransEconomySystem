@@ -6,7 +6,7 @@ JgransEconomySystem is a plugin for Terraria that provides an economy system for
 
 - Currency system: Players can earn and spend currency.
 - Player accounts: Each player has their own currency balance.
-- Shops: Set up shops using switch mechanisms where players can buy.
+- Shops: Set up shops using switch mechanisms where players can buy item.
 - Command shops: Create shops using commands as the item to be sold.
 - Rank-based rewards: Define ranks and set rewards based on currency amount.
 - Configurable: Customize various aspects of the plugin through the configuration file.
