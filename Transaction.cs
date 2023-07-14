@@ -3,180 +3,211 @@ using TShockAPI;
 
 namespace JgransEconomySystem
 {
-    public static class Transaction
-    {
-        private static string path = Path.Combine(TShock.SavePath, "JgransEconomyBanks.sqlite");
-        private static EconomyDatabase bank = new EconomyDatabase(path);
-
-        private static double TaxRate => 0.2;
-
-        public const string ReceivedFromKillingNormalNPC = "Received from killing normal NPC";
-        public const string ReceivedFromKillingSpecialNPC = "Received from killing special NPC";
-        public const string ReceivedFromKillingHostileNPC = "Received from killing hostile NPC";
-        public const string ReceivedFromPayment = "Received from payment";
-        public const string ReceivedFromKillingBossNPC = "Received from killing boss NPC";
-        public const string ReceivedFromVoting = "Received from voting the server";
-        public const string PurchasedFromShop = "Bought an item from shop";
+	public static class Transaction
+	{
+		private static string path = Path.Combine(TShock.SavePath, "JgransEconomyBanks.sqlite");
+		private static EconomyDatabase bank = new EconomyDatabase(path);
+		private static Dictionary<int, DateTime> cooldowns = new Dictionary<int, DateTime>();
 
 
-        private static int CalculateTax(int amount)
-        {
-            var taxAmount = (int)Math.Ceiling(amount * TaxRate);
-            return taxAmount;
-        }
+		private static double TaxRate => 0.2;
 
-        public static async Task ProcessTransaction(int playerId, string playerName, int amount)
-        {
-            var taxAmount = CalculateTax(amount);
-            var netAmount = amount - taxAmount;
+		public const string ReceivedFromKillingNormalNPC = "Received from killing normal NPC";
+		public const string ReceivedFromKillingSpecialNPC = "Received from killing special NPC";
+		public const string ReceivedFromKillingHostileNPC = "Received from killing hostile NPC";
+		public const string ReceivedFromPayment = "Received from payment";
+		public const string ReceivedFromKillingBossNPC = "Received from killing boss NPC";
+		public const string ReceivedFromVoting = "Received from voting the server";
+		public const string PurchasedFromShop = "Bought an item from shop";
 
-            var currentBalance = await bank.GetCurrencyAmount(playerId);
-            var newBalance = currentBalance + netAmount;
 
-            await bank.SaveCurrencyAmount(playerId, newBalance);
-            await bank.RecordTransaction(playerName, "Received from transaction", amount);
-            await bank.RecordTaxTransaction(taxAmount);
-        }
+		private static int CalculateTax(int amount)
+		{
+			var taxAmount = (int)Math.Ceiling(amount * TaxRate);
+			return taxAmount;
+		}
 
-        public static async Task HandleSwitchTransaction(int switchX, int switchY, int playerID, bool itemShop, bool sellCommand)
-        {
-            // Retrieve the shop details from the database based on the switch coordinates
-            if (itemShop)
-            {
-                var itemShops = await bank.GetShopFromDatabase(switchX, switchY, true, false);
-                var player = TShock.Players.FirstOrDefault(p => p?.Account?.ID == playerID);
+		public static async Task ProcessTransaction(int playerId, string playerName, int amount)
+		{
+			var taxAmount = CalculateTax(amount);
+			var netAmount = amount - taxAmount;
 
-                if (itemShops != null && player != null)
-                {
-                    var allowedGroups = itemShops.AllowedGroup.Split(',');
+			var currentBalance = await bank.GetCurrencyAmount(playerId);
+			var newBalance = currentBalance + netAmount;
 
-                    if (!allowedGroups.Contains(player.Group.Name))
-                    {
-                        player.SendErrorMessage("Your rank is not allowed to purchase this item.");
-                        player.SendErrorMessage("Allowed ranks: " + string.Join(", ", allowedGroups));
-                        return;
-                    }
+			await bank.SaveCurrencyAmount(playerId, newBalance);
+			await bank.RecordTransaction(playerName, "Received from transaction", amount);
+			await bank.RecordTaxTransaction(taxAmount);
+		}
 
-                    var itemID = itemShops.Item;
-                    var stackSize = itemShops.Stack;
-                    var shopPrice = itemShops.Price;
+		public static async Task HandleSwitchTransaction(int switchX, int switchY, int playerID, bool itemShop, bool sellCommand)
+		{
+			// Check if the player is on cooldown
+			if (cooldowns.TryGetValue(playerID, out DateTime lastExecutionTime))
+			{
+				TimeSpan cooldownDuration = TimeSpan.FromSeconds(5); // Adjust the cooldown duration as needed
+				TimeSpan timeSinceLastExecution = DateTime.Now - lastExecutionTime;
 
-                    var item = TShock.Utils.GetItemById(itemID);
+				if (timeSinceLastExecution < cooldownDuration)
+				{
+					// Player is on cooldown, return or display a message
+					var player = TShock.Players.FirstOrDefault(p => p?.Account?.ID == playerID);
+					player?.SendErrorMessage("You are on cooldown. Please wait before performing another transaction.");
+					return;
+				}
+			}
 
-                    // Retrieve the player's currency amount from the database
-                    var currencyAmount = await bank.GetCurrencyAmount(playerID);
+			// Retrieve the shop details from the database based on the switch coordinates
+			if (itemShop)
+			{
+				var itemShops = await bank.GetShopFromDatabase(switchX, switchY, true, false);
+				var player = TShock.Players.FirstOrDefault(p => p?.Account?.ID == playerID);
 
-                    // Check if the player has enough currency to make the purchase
-                    if (currencyAmount >= shopPrice)
-                    {
-                        var taxAmount = CalculateTax(shopPrice);
-                        var newBalance = currencyAmount - shopPrice - taxAmount;
+				if (itemShops != null && player != null)
+				{
+					var allowedGroups = itemShops.AllowedGroup.Split(',');
 
-                        // Check if the resulting currency amount would be negative
-                        if (newBalance >= 0)
-                        {
-                            // Perform the transaction
-                            await bank.SaveCurrencyAmount(playerID, newBalance);
+					if (!allowedGroups.Contains(player.Group.Name))
+					{
+						player.SendErrorMessage("Your rank is not allowed to purchase this item.");
+						player.SendErrorMessage("Allowed ranks: " + string.Join(", ", allowedGroups));
+						return;
+					}
 
-                            // Give the player the item stacks
-                            player.GiveItem(itemID, stackSize);
+					var itemID = itemShops.Item;
+					var stackSize = itemShops.Stack;
+					var shopPrice = itemShops.Price;
 
-                            // Record the transaction
-                            await bank.RecordTransaction(player.Name, Transaction.PurchasedFromShop, shopPrice + taxAmount);
-                            await bank.RecordTaxTransaction(shopPrice + taxAmount);
+					var item = TShock.Utils.GetItemById(itemID);
 
-                            player.SendSuccessMessage($"Successfully purchased {item.Name} x {stackSize} for {shopPrice + taxAmount}.");
-                            player.SendSuccessMessage("Tax transaction applied: 20% to maintain economy balance.");
-                            player.SendSuccessMessage($"Updated Balance: {newBalance}");
-                        }
-                        else
-                        {
-                            player.SendErrorMessage("Insufficient funds to make the purchase.");
-                            player.SendMessage($"Balance: {currencyAmount}", Color.LightBlue);
-                        }
-                    }
-                    else
-                    {
-                        player.SendErrorMessage("Insufficient funds to make the purchase.");
-                        player.SendMessage($"Balance: {currencyAmount}", Color.LightBlue);
-                    }
-                }
-            }
+					// Retrieve the player's currency amount from the database
+					var currencyAmount = await bank.GetCurrencyAmount(playerID);
 
-            if (sellCommand)
-            {
-                var commandShops = await bank.GetShopFromDatabase(switchX, switchY, false, true);
-                var player = TShock.Players.FirstOrDefault(p => p?.Account?.ID == playerID);
+					// Check if the player has enough currency to make the purchase
+					if (currencyAmount >= shopPrice)
+					{
+						var taxAmount = CalculateTax(shopPrice);
+						var newBalance = currencyAmount - shopPrice - taxAmount;
 
-                if (commandShops != null && player != null)
-                {
-                    var allowedGroups = commandShops.AllowedGroup.Split(',');
+						// Check if the resulting currency amount would be negative
+						if (newBalance >= 0)
+						{
+							// Perform the transaction
+							await bank.SaveCurrencyAmount(playerID, newBalance);
 
-                    if (!allowedGroups.Contains(player.Group.Name))
-                    {
-                        player.SendErrorMessage("Your rank is not allowed to purchase this item.");
-                        player.SendErrorMessage("Allowed ranks: " + string.Join(", ", allowedGroups));
-                        return;
-                    }
+							// Give the player the item stacks
+							player.GiveItem(itemID, stackSize);
 
-                    var command = commandShops.Command;
-                    var price = commandShops.Price;
+							// Record the transaction
+							await bank.RecordTransaction(player.Name, Transaction.PurchasedFromShop, shopPrice + taxAmount);
+							await bank.RecordTaxTransaction(shopPrice + taxAmount);
 
-                    var currencyAmount = await bank.GetCurrencyAmount(playerID);
+							player.SendSuccessMessage($"Successfully purchased {item.Name} x {stackSize} for {shopPrice + taxAmount}.");
+							player.SendSuccessMessage("Tax transaction applied: 20% to maintain economy balance.");
+							player.SendSuccessMessage($"Updated Balance: {newBalance}");
+						}
+						else
+						{
+							player.SendErrorMessage("Insufficient funds to make the purchase.");
+							player.SendMessage($"Balance: {currencyAmount}", Color.LightBlue);
+						}
+					}
+					else
+					{
+						player.SendErrorMessage("Insufficient funds to make the purchase.");
+						player.SendMessage($"Balance: {currencyAmount}", Color.LightBlue);
+					}
+				}
+				CleanupCooldowns();
+			}
 
-                    if (currencyAmount >= price)
-                    {
-                        var taxAmount = CalculateTax(price);
-                        var newBalance = currencyAmount - price - taxAmount;
+			if (sellCommand)
+			{
+				var commandShops = await bank.GetShopFromDatabase(switchX, switchY, false, true);
+				var player = TShock.Players.FirstOrDefault(p => p?.Account?.ID == playerID);
 
-                        // Check if the resulting currency amount would be negative
-                        if (newBalance >= 0)
-                        {
-                            // Perform the transaction
-                            await bank.SaveCurrencyAmount(playerID, newBalance);
+				if (commandShops != null && player != null)
+				{
+					var allowedGroups = commandShops.AllowedGroup.Split(',');
 
-                            var originalGroup = player.Group.ToString();
+					if (!allowedGroups.Contains(player.Group.Name))
+					{
+						player.SendErrorMessage("Your rank is not allowed to purchase this item.");
+						player.SendErrorMessage("Allowed ranks: " + string.Join(", ", allowedGroups));
+						return;
+					}
 
-                            // Temporarily set the player's group to a group with the necessary permissions
-                            TShock.UserAccounts.SetUserGroup(player.Account, "superadmin");
+					var command = commandShops.Command;
+					var price = commandShops.Price;
 
-                            try
-                            {
-                                // Execute the command
-                                Commands.HandleCommand(player, command);
-                            }
-                            finally
-                            {
-                                // Restore the player's original group
-                                TShock.UserAccounts.SetUserGroup(player.Account, originalGroup);
-                            }
+					var currencyAmount = await bank.GetCurrencyAmount(playerID);
 
-                            // Record the transaction
-                            await bank.RecordTransaction(player.Name, Transaction.PurchasedFromShop, price + taxAmount);
-                            await bank.RecordTaxTransaction(price + taxAmount);
+					if (currencyAmount >= price)
+					{
+						var taxAmount = CalculateTax(price);
+						var newBalance = currencyAmount - price - taxAmount;
 
-                            player.SendSuccessMessage("Tax transaction applied: 20% to maintain economy balance.");
-                            player.SendSuccessMessage($"Updated Balance: {newBalance}");
-                        }
-                        else
-                        {
-                            player.SendErrorMessage("Insufficient funds to make the purchase.");
-                            player.SendMessage($"Balance: {currencyAmount}", Color.LightBlue);
-                        }
-                    }
-                    else
-                    {
-                        player.SendErrorMessage("Insufficient funds to make the purchase.");
-                        player.SendMessage($"Balance: {currencyAmount}", Color.LightBlue);
-                    }
-                }
-            }
+						// Check if the resulting currency amount would be negative
+						if (newBalance >= 0)
+						{
+							// Perform the transaction
+							await bank.SaveCurrencyAmount(playerID, newBalance);
 
-            else
-            {
-                // Shop not found or player not found or not initialized correctly
-                TShock.Log.Error("Shop not found or player not found or not initialized correctly for switch transaction.");
-            }
-        }
-    }
+							var originalGroup = player.Group.ToString();
+
+							// Temporarily set the player's group to a group with the necessary permissions
+							TShock.UserAccounts.SetUserGroup(player.Account, "superadmin");
+
+							try
+							{
+								// Execute the command
+								Commands.HandleCommand(player, command);
+							}
+							finally
+							{
+								// Restore the player's original group
+								TShock.UserAccounts.SetUserGroup(player.Account, originalGroup);
+							}
+
+							// Record the transaction
+							await bank.RecordTransaction(player.Name, Transaction.PurchasedFromShop, price + taxAmount);
+							await bank.RecordTaxTransaction(price + taxAmount);
+
+							player.SendSuccessMessage("Tax transaction applied: 20% to maintain economy balance.");
+							player.SendSuccessMessage($"Updated Balance: {newBalance}");
+						}
+						else
+						{
+							player.SendErrorMessage("Insufficient funds to make the purchase.");
+							player.SendMessage($"Balance: {currencyAmount}", Color.LightBlue);
+						}
+					}
+					else
+					{
+						player.SendErrorMessage("Insufficient funds to make the purchase.");
+						player.SendMessage($"Balance: {currencyAmount}", Color.LightBlue);
+					}
+				}
+				CleanupCooldowns();
+			}
+
+			else
+			{
+				// Shop not found or player not found or not initialized correctly
+				TShock.Log.Error("Shop not found or player not found or not initialized correctly for switch transaction.");
+			}
+
+			// Update the last execution time for the player
+			cooldowns[playerID] = DateTime.Now;
+		}
+
+		private static void CleanupCooldowns()
+		{
+			TimeSpan cooldownDuration = TimeSpan.FromSeconds(5); // Adjust the cooldown duration as needed
+			DateTime expirationTime = DateTime.Now - cooldownDuration;
+
+			// Remove expired cooldown entries
+			cooldowns = cooldowns.Where(kvp => kvp.Value > expirationTime).ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+		}
+	}
 }
