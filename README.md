@@ -1,6 +1,6 @@
 # JgransEconomySystem
 
-JgransEconomySystem is a plugin for Terraria that provides an economy system for your server.
+JgransEconomySystem is a plugin for TShock Terraria Server that provides an economy system for your server.
 
 ## Features
 
