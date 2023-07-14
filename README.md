@@ -50,10 +50,6 @@ The plugin uses a SQLite database to store player account information and shop d
 
 Refer to the in-game command descriptions for more information on how to use each command.
 
-## Shop Setup
-
-To set up a shop, use the `/setshop` command while standing near the switch that will trigger the shop. The plugin will automatically detect the coordinates of the switch and prompt you for further information, such as the item to be sold, price, and allowed groups.
-
 ## Support
 
 If you encounter any issues or have any questions, please create a new [Issue](https://github.com/jgranserver/JgransEconomySystem/issues) on the GitHub repository.
