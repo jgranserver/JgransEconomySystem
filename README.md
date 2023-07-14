@@ -26,10 +26,6 @@ To build the plugin from source code, follow these steps:
 
 ## Configuration
 
-The plugin uses a configuration file to customize its behavior. The configuration file is named `JgransEconomySystemConfig.json` and should be placed in the server's `tshock` folder. Modify the settings in the configuration file to suit your server's needs.
-
-## Configuration
-
 The plugin uses a configuration file (`JgransEconomySystemConfig.json`) to customize its behavior. The following settings can be modified in the configuration file:
 
 - `CurrencyName` (default: "jspoints"): The name of the currency used in the economy system.
