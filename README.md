@@ -1,6 +1,6 @@
 # JgransEconomySystem
 
-JgransEconomySystem is a plugin for Terraria that provides an economy system for your server.
+JgransEconomySystem is a plugin for TShock Terraria Server that provides an economy system for your server.
 
 ## Features
 
@@ -23,10 +23,6 @@ To build the plugin from source code, follow these steps:
 6. Run the following command to restore the NuGet packages: ```dotnet restore```
 7. Build the project by running the following command: ```dotnet build```
 8. The built plugin DLL file will be located in the `bin/Debug/net6.0` or `bin/Release/net6.0` directory, depending on the build configuration.
-
-## Configuration
-
-The plugin uses a configuration file to customize its behavior. The configuration file is named `JgransEconomySystemConfig.json` and should be placed in the server's `tshock` folder. Modify the settings in the configuration file to suit your server's needs.
 
 ## Configuration
 
@@ -53,19 +49,27 @@ The plugin uses a SQLite database to store player account information and shop d
 
 ## Commands
 
-- `/bank` - Displays the player's currency balance.
-- `/setshop` - Sets up a shop at the player's current location using a switch mechanism.
-- `/shopallow` - Adds a group to the allowed groups for a shop.
-- `/delshop` - Deletes a shop at the player's current location.
-- `/delcommandshop` - Deletes a command shop at the player's current location.
-- `/sellcommand` - Sets up a command shop at the player's current location.
-- `/rankadd` - Adds a new rank.
-- `/rankdel` - Deletes a rank.
-- `/ranknext` - Updates the next rank for a rank.
-- `/rankcost` - Updates the required currency amount for a rank.
-- `/rankdown` - Moves a player down to a lower rank.
-- `/ranks` - Displays a list of all rank names.
-- `/rankup` - Promotes a player to the next rank.
+### General Commands
+
+- `/bank` - Displays the bank commands.
+
+### Shop Commands
+
+- `/setshop` - Sets up a shop after executing the command properly and hitting a switch button. (Permission: jgranserver.admin)
+- `/sellcommand` - Sets up a command shop after executing the command properly and hitting a switch button. (Permission: jgranserver.admin)
+- `/shopallow` - Adds a group to the allowed groups for a shop after executing and hitting the switch button. (Permission: jgranserver.admin)
+- `/delshop` - Deletes a shop at the specified switch location if a shop is already available. (Permission: jgranserver.admin)
+- `/delcommandshop` - Deletes a command shop at the specified switch location if a shop is already available. (Permission: jgranserver.admin)
+
+### Rank Commands
+
+- `/rankadd` - Adds a new rank. (Permission: jgranserver.admin)
+- `/rankdel` - Deletes a rank. (Permission: jgranserver.admin)
+- `/ranknext` - Updates the next rank of a rank. (Permission: jgranserver.admin)
+- `/rankcost` - Updates the required currency amount for a rank. (Permission: jgranserver.admin)
+- `/rankdown` - Moves a group of players in a rank to the specified rank. (Permission: jgranserver.admin)
+- `/ranks` - Displays a list of all rank names. (Permission: jgraneconomy.system)
+- `/rankup` - Promotes a player to the next rank. (Permission: jgraneconomy.system)
 
 Refer to the in-game command descriptions for more information on how to use each command.
 
