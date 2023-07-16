@@ -1,13 +1,12 @@
-
-bin/Debug/net6.0/JgransEconomySystem.deps.json
-bin/Debug/net6.0/JgransEconomySystem.dll
-bin/Debug/net6.0/HttpServer.dll
-bin/Debug/net6.0/JgransEconomySystem.pdb
-obj/Debug/net6.0/JgransEconomySystem.dll
-obj/Debug/net6.0/JgransEconomySystem.pdb
-obj/Debug/net6.0/ref/JgransEconomySystem.dll
-obj/Debug/net6.0/refint/JgransEconomySystem.dll
-obj/Debug/net6.0/JgransEconomySystem.dll
-obj/Debug/net6.0/JgransEconomySystem.pdb
-obj/Debug/net6.0/ref/JgransEconomySystem.dll
-obj/Debug/net6.0/refint/JgransEconomySystem.dll
+# Compiled source #
+###################
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.so
+*/bin/*
+*/obj/*
+bin/*
+obj/*
