@@ -53,14 +53,6 @@ The plugin uses a SQLite database to store player account information and shop d
 
 - `/bank` - Displays the bank commands.
 
-### Shop Commands
-
-- `/setshop` - Sets up a shop after executing the command properly and hitting a switch button. (Permission: jgranserver.admin)
-- `/sellcommand` - Sets up a command shop after executing the command properly and hitting a switch button. (Permission: jgranserver.admin)
-- `/shopallow` - Adds a group to the allowed groups for a shop after executing and hitting the switch button. (Permission: jgranserver.admin)
-- `/delshop` - Deletes a shop at the specified switch location if a shop is already available. (Permission: jgranserver.admin)
-- `/delcommandshop` - Deletes a command shop at the specified switch location if a shop is already available. (Permission: jgranserver.admin)
-
 ### Rank Commands
 
 - `/rankadd` - Adds a new rank. (Permission: jgranserver.admin)

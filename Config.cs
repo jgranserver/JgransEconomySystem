@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
+using Mono.Cecil.Cil;
 using Newtonsoft.Json;
 using Terraria.ID;
 
@@ -26,7 +27,7 @@ namespace JgransEconomySystem
 			Description = "The name of the server",
 			Value = "Jgrans"
 		};
-		
+
 		public ConfigProperty<double> TaxRate { get; set; } = new ConfigProperty<double>
 		{
 			Description = "The shop and transaction tax rate",
@@ -406,7 +407,6 @@ namespace JgransEconomySystem
 			NPCID.TheDestroyer,
 			NPCID.SkeletronPrime,
 			NPCID.Retinazer,
-			NPCID.Medusa,
 			NPCID.Spazmatism,
 			// Add more boss NPCs as needed
 			}

@@ -1,18 +1,18 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.Xna.Framework;
 using TShockAPI;
+using TShockAPI.Configuration;
 using TShockAPI.DB;
 
 namespace JgransEconomySystem
 {
 	public class Rank
 	{
-		private static readonly string path = Path.Combine(TShock.SavePath, "JgransEconomyBanks.sqlite");
-		private static readonly string transaction = Path.Combine(TShock.SavePath, "EconomyTransactions.sqlite");
-		
-		private static readonly string tshockPath = Path.Combine(TShock.SavePath, "tshock.sqlite");
+		private static string path = Path.Combine(TShock.SavePath, "JgransEconomyBanks.sqlite");
+		private static string tshockPath = Path.Combine(TShock.SavePath, "tshock.sqlite");
+		private static JgransEconomySystemConfig? config;
 
-		private static EconomyDatabase bank = new EconomyDatabase(path, transaction);
+		private static EconomyDatabase bank = new EconomyDatabase(path);
 
 		public string Name { get; set; }
 		public int RequiredCurrencyAmount { get; set; }
@@ -75,56 +75,59 @@ namespace JgransEconomySystem
 		private static async void RankUpCommand(CommandArgs args)
 		{
 			var player = args.Player;
-			var currentCurrencyAmount = await bank.GetCurrencyAmount(player.Account.ID);
-			var ranks = await bank.GetRanks();
-			var currentRank = ranks.FirstOrDefault(r => r.Name == player.Group.Name);
-			var nextRank = ranks.FirstOrDefault(r => r.Name == currentRank?.NextRank);
 
-			if (nextRank != null)
+			try
 			{
-				var requiredCurrency = nextRank.RequiredCurrencyAmount - currentCurrencyAmount;
-				bool ableRankUp = requiredCurrency <= 0;
+				var currentCurrencyAmount = await bank.GetCurrencyAmount(player.Account.ID);
+				var ranks = await bank.GetRanks();
+				var currentRank = ranks.FirstOrDefault(r => r.Name == player.Group.Name);
+				var nextRank = ranks.FirstOrDefault(r => r.Name == currentRank?.NextRank);
 
-				if (ableRankUp)
+				if (nextRank != null)
 				{
-					// Process the transaction
-					var newBalance = currentCurrencyAmount - nextRank.RequiredCurrencyAmount;
-					player.SendMessage($"Balance after ranking up: {newBalance}", Color.LightBlue);
+					var tax = nextRank.RequiredCurrencyAmount * (config?.TaxRate.Value ?? 0); // Ensure config is not null
+					var requiredCurrency = nextRank.RequiredCurrencyAmount + tax - currentCurrencyAmount;
+					bool ableRankUp = requiredCurrency <= 0;
 
-					await Transaction.ProcessTransaction(player.Account.ID, player.Name, nextRank.RequiredCurrencyAmount);
-					await bank.SaveCurrencyAmount(player.Account.ID, newBalance);
-
-					var group = TShock.Groups.GetGroupByName(nextRank.GroupName);
-					if (group != null)
+					if (ableRankUp)
 					{
-						var ply = TShock.UserAccounts.GetUserAccountByName(player.Name);
-						if (ply != null)
+						// Process the transaction
+						var newBalance = currentCurrencyAmount - nextRank.RequiredCurrencyAmount;
+						await Transaction.ProcessTransaction(player.Account.ID, player.Name, nextRank.RequiredCurrencyAmount);
+						await bank.SaveCurrencyAmount(player.Account.ID, newBalance);
+
+						var group = TShock.Groups.GetGroupByName(nextRank.GroupName);
+						if (group != null)
 						{
-							TShock.UserAccounts.SetUserGroup(ply, group.ToString());
+							var ply = TShock.UserAccounts.GetUserAccountByName(player.Name);
+							if (ply != null)
+							{
+								TShock.UserAccounts.SetUserGroup(ply, group.ToString());
+							}
+							player.SendSuccessMessage($"Congratulations! You have been promoted to the {group.Name} rank.");
+							player.SendMessage($"Balance after ranking up: {newBalance}", Color.LightBlue);
+							return;
 						}
-						player.SendSuccessMessage($"Congratulations! You have been promoted to the {group.Name} rank.");
-						return;
+						else
+						{
+							TShock.Log.Error($"Group '{nextRank.GroupName}' not found for rank promotion.");
+						}
 					}
 					else
 					{
-						TShock.Log.Error($"Group '{nextRank.GroupName}' not found for rank promotion.");
-						return;
+						player.SendInfoMessage($"Current rank: {currentRank?.Name}.");
+						player.SendInfoMessage($"You need {requiredCurrency} more currency to rank up to {nextRank.Name}.");
 					}
 				}
 				else
 				{
-					if (requiredCurrency > 0)
-					{
-						player.SendInfoMessage($"Current rank: {currentRank?.Name}.");
-						player.SendInfoMessage($"You need {requiredCurrency} more currency to rank up to {nextRank.Name}.");
-						return;
-					}
+					player.SendInfoMessage("You have reached the highest rank.");
 				}
 			}
-			else
+			catch (Exception ex)
 			{
-				player.SendInfoMessage("You have reached the highest rank.");
-				return;
+				TShock.Log.Error($"Error during rank up: {ex.Message}");
+				player.SendErrorMessage("An error occurred during rank up. Please contact an administrator.");
 			}
 		}
 

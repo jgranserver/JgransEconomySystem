@@ -7,6 +7,7 @@ using System.IO.Streams;
 using Newtonsoft.Json;
 using Terraria.ID;
 using Terraria.GameContent.UI;
+using SQLitePCL;
 
 namespace JgransEconomySystem
 {
@@ -25,7 +26,7 @@ namespace JgransEconomySystem
 
 		public override string Name => "JgransEconomySystem";
 
-		public override Version Version => new Version(3, 0);
+		public override Version Version => new Version(4, 0);
 
 		public override string Author => "jgranserver";
 
@@ -33,7 +34,7 @@ namespace JgransEconomySystem
 
 		public override void Initialize()
 		{
-			var config = JgransEconomySystemConfig.Read(configPath);
+			config = JgransEconomySystemConfig.Read(configPath);
 			if (!File.Exists(configPath))
 			{
 				config.Write(configPath);
@@ -48,15 +49,10 @@ namespace JgransEconomySystem
 			GetDataHandlers.TileEdit += OnTileEdit;
 
 			Commands.ChatCommands.Add(new Command("jgraneconomy.system", EconomyCommandsAsync, "bank"));
-			Commands.ChatCommands.Add(new Command("jgranserver.admin", SetupShopCommand, "setshop"));
-			Commands.ChatCommands.Add(new Command("jgranserver.admin", AddAllowedGroupCommand, "shopallow"));
-			Commands.ChatCommands.Add(new Command("jgranserver.admin", DeleteItemShopCommand, "delshop"));
-			Commands.ChatCommands.Add(new Command("jgranserver.admin", DeleteShopCommand, "delcommandshop"));
-			Commands.ChatCommands.Add(new Command("jgranserver.admin", SetupSellCommand, "sellcommand"));
-			Commands.ChatCommands.Add(new Command("jgranserver.admin", SetupBuyerChest, "setbuyer", "sbchest"));
-			Commands.ChatCommands.Add(new Command("yourcommandname", ReloadConfigCommand, "economyreload", "er"));
+			Commands.ChatCommands.Add(new Command("jgraneconomy.admin", ReloadConfigCommand, "economyreload", "er"));
 
 			Rank.Initialize();
+			Transaction.InitializeTransactionDataAsync();
 
 		}
 
@@ -112,12 +108,13 @@ namespace JgransEconomySystem
 		private async Task Economy(SendDataEventArgs args)
 		{
 			config = new JgransEconomySystemConfig();
-			
-			if(config.ToggleEconomy.Value)
+			bool EconomyOnline = config.ToggleEconomy.Value;
+
+			if (!EconomyOnline)
 			{
 				return;
 			}
-			
+
 			var data = args.MsgId;
 			var npcIndex = args.number;
 
@@ -132,7 +129,13 @@ namespace JgransEconomySystem
 				return;
 
 			var player = players[0];
+			var unsuccessfulAttempts = player.GetData<int>("unsuccessfulAttempts");
 			var npc = Main.npc[npcIndex];
+			
+			if(npc.SpawnedFromStatue)
+			{
+				return;
+			}
 
 			bool isHostile = NPCType.IsHostile(npc.netID);
 			bool isSpecial = NPCType.IsSpecial(npc.netID);
@@ -154,9 +157,40 @@ namespace JgransEconomySystem
 					if (isHardmode)
 						randomizer = Main.rand.Next(86);
 
+					// Check if the randomizer value is below 20
+					if (randomizer < 20)
+					{
+						// Reset the counter if the randomizer value is below 20
+						unsuccessfulAttempts = 0;
+						player.SetData("unsuccessfulAttempts", unsuccessfulAttempts);
+					}
+					else
+					{
+						// Increment the counter if the randomizer value is not below 20
+						unsuccessfulAttempts++;
+						player.SetData("unsuccessfulAttempts", unsuccessfulAttempts);
+
+						// Check if the counter reaches the limit (5)
+						if (unsuccessfulAttempts >= 5)
+						{
+							// Set the randomizer value to 1
+							randomizer = 1;
+							unsuccessfulAttempts = 0; // Reset the counter
+							player.SetData("unsuccessfulAttempts", unsuccessfulAttempts);
+						}
+					}
+
 					if (isBoss3 && spawned && randomizer <= config.PerfectRate.Value)
 					{
-						currencyAmount = Main.rand.Next(config.Boss3MaxAmount.Value);
+						if (randomizer != 1)
+						{
+							currencyAmount = Main.rand.Next(config.Boss3MaxAmount.Value);
+						}
+						else
+						{
+							currencyAmount = config.Boss3MaxAmount.Value;
+						}
+
 						reason = Transaction.ReceivedFromKillingBossNPC;
 						TSPlayer.All.SendMessage($"{player.Name} recieved {currencyAmount} {config.CurrencyName.Value} from killing {npc.TypeName}.", Color.LightCyan);
 
@@ -164,7 +198,14 @@ namespace JgransEconomySystem
 					}
 					else if (isBoss2 && spawned && randomizer <= config.PerfectRate.Value)
 					{
-						currencyAmount = Main.rand.Next(config.Boss2MaxAmount.Value);
+						if (randomizer != 1)
+						{
+							currencyAmount = Main.rand.Next(config.Boss2MaxAmount.Value);
+						}
+						else
+						{
+							currencyAmount = config.Boss2MaxAmount.Value;
+						}
 						reason = Transaction.ReceivedFromKillingBossNPC;
 						TSPlayer.All.SendMessage($"{player.Name} recieved {currencyAmount} {config.CurrencyName.Value} from killing {npc.TypeName}.", Color.LightCyan);
 
@@ -172,7 +213,14 @@ namespace JgransEconomySystem
 					}
 					else if (isBoss1 && spawned && randomizer <= config.PerfectRate.Value)
 					{
-						currencyAmount = Main.rand.Next(config.Boss1MaxAmount.Value);
+						if (randomizer != 1)
+						{
+							currencyAmount = Main.rand.Next(config.Boss1MaxAmount.Value);
+						}
+						else
+						{
+							currencyAmount = config.Boss1MaxAmount.Value;
+						}
 						reason = Transaction.ReceivedFromKillingBossNPC;
 						TSPlayer.All.SendMessage($"{player.Name} recieved {currencyAmount} {config.CurrencyName.Value} from killing {npc.TypeName}.", Color.LightCyan);
 
@@ -180,17 +228,38 @@ namespace JgransEconomySystem
 					}
 					else if (isSpecial && randomizer <= config.HighRate.Value)
 					{
-						currencyAmount = Main.rand.Next(config.SpecialMaxAmount.Value);
+						if (randomizer != 1)
+						{
+							currencyAmount = Main.rand.Next(config.SpecialMaxAmount.Value);
+						}
+						else
+						{
+							currencyAmount = config.SpecialMaxAmount.Value;
+						}
 						reason = Transaction.ReceivedFromKillingSpecialNPC;
 					}
 					else if (isHostile && randomizer <= config.MedRate.Value)
 					{
-						currencyAmount = Main.rand.Next(config.HostileMaxAmount.Value);
+						if (randomizer != 1)
+						{
+							currencyAmount = Main.rand.Next(config.HostileMaxAmount.Value);
+						}
+						else
+						{
+							currencyAmount = config.HostileMaxAmount.Value;
+						}
 						reason = Transaction.ReceivedFromKillingHostileNPC;
 					}
 					else if (!(isHostile || isSpecial || isBoss1 || isBoss2 || isBoss3) && randomizer <= config.LowRate.Value)
 					{
-						currencyAmount = Main.rand.Next(config.NormalMaxAmount.Value);
+						if (randomizer != 1)
+						{
+							currencyAmount = Main.rand.Next(config.NormalMaxAmount.Value);
+						}
+						else
+						{
+							currencyAmount = config.NormalMaxAmount.Value;
+						}
 						reason = Transaction.ReceivedFromKillingNormalNPC;
 					}
 
@@ -209,11 +278,10 @@ namespace JgransEconomySystem
 
 						int balance = await bank.GetCurrencyAmount(player.Account.ID);
 						int newBalance = balance + currencyAmount;
-						await EconomyDatabase.RecordTransaction(player.Name, reason, currencyAmount);
+						await Transaction.RecordTransaction(player.Name, reason, currencyAmount);
 						player.SendData(PacketTypes.CreateCombatTextExtended, $"{currencyAmount} {config.CurrencyName.Value}", (int)Color.LightBlue.PackedValue, player.X, player.Y);
 						await bank.SaveCurrencyAmount(player.Account.ID, newBalance);
 					}
-
 					break;
 
 				default:
@@ -232,7 +300,7 @@ namespace JgransEconomySystem
 				// Plantera bulb was broken by a player
 				// Perform your desired actions
 				spawned = true;
-				TSPlayer.All.SendInfoMessage("Reward Counter Set to 1");
+				TSPlayer.All.SendInfoMessage("Boss Spawned! The one who gets the last hit gets the jspoints!");
 			}
 		}
 
@@ -242,15 +310,22 @@ namespace JgransEconomySystem
 			var cmd = args.Parameters;
 			var player = args.Player;
 
-			if (cmd.Count <= 0)
+			if (cmd.Count == 0)
+			{
+				player.SendMessage("Bank commands:", Color.LightBlue);
+				player.SendMessage("/bank bal", Color.LightBlue);
+				player.SendMessage("/bank pay", Color.LightBlue);
+				if (player.Group.HasPermission("jgranserver.admin"))
+				{
+					player.SendMessage("/bank resetall", Color.LightBlue);
+					player.SendMessage("/bank check", Color.LightBlue);
+				}
 				return;
+			}
 
 			switch (cmd[0])
 			{
 				case "bal":
-					if (cmd.Count < 1)
-						return;
-
 					var bal = await bank.GetCurrencyAmount(player.Account.ID);
 					player.SendMessage($"Bank Balance: [c/#00FF6E:{bal}] {config.CurrencyName.Value}/s", Color.LightBlue);
 					break;
@@ -321,6 +396,43 @@ namespace JgransEconomySystem
 					await bank.SaveCurrencyAmount(targetPlayer.ID, newBalance);
 					break;
 
+				case "giveall":
+					if (!player.HasPermission("jgranserver.admin"))
+					{
+						return;
+					}
+
+					if (int.TryParse(cmd[1], out int amount))
+					{
+						if (amount != 0)
+						{
+							foreach (var p in TShock.UserAccounts.GetUserAccounts())
+							{
+								var exist = await bank.PlayerAccountExists(p.ID);
+								var _p = TSPlayer.All;
+
+								if (exist)
+								{
+									var playerBalance = await bank.GetCurrencyAmount(p.ID);
+									newBalance = playerBalance + amount;
+
+									await bank.SaveCurrencyAmount(p.ID, newBalance);
+
+									if (_p.IsLoggedIn)
+									{
+										_p.SendSuccessMessage("Received {0} jspoints as reward.", amount);
+									}
+								}
+							}
+							player.SendSuccessMessage("Successfully added {0} jspoints for each players bank.", amount);
+						}
+					}
+					else
+					{
+						player.SendErrorMessage("Command failed to execute. Please contact the admin.");
+					}
+					break;
+
 				case "pay":
 					if (cmd.Count < 3 || !int.TryParse(cmd[2], out int payment) || payment <= 0)
 					{
@@ -349,15 +461,21 @@ namespace JgransEconomySystem
 					int receiverBalance = await bank.GetCurrencyAmount(receiverId);
 					int senderBalance = await bank.GetCurrencyAmount(senderId);
 
-					int receiverNewBalance = receiverBalance + payment;
-					int senderNewBalance = senderBalance - payment;
+					if (senderBalance >= payment)
+					{
+						int receiverNewBalance = receiverBalance + payment;
+						int senderNewBalance = senderBalance - payment;
 
-					await Transaction.ProcessTransaction(receiverId, receiverAccount.Name, payment);
-					await bank.SaveCurrencyAmount(senderId, senderNewBalance);
+						await Transaction.ProcessTransaction(receiverId, receiverAccount.Name, payment);
+						await bank.SaveCurrencyAmount(senderId, senderNewBalance);
 
-					player.SendSuccessMessage($"You have successfully paid {payment} {config.CurrencyName.Value}/s to {receiverPlayer.Name}.");
-					receiverPlayer.SendSuccessMessage($"You have received {payment} {config.CurrencyName.Value}/s from {player.Name}.");
-					break;
+						player.SendSuccessMessage($"You have successfully paid {payment} {config.CurrencyName.Value}/s to {receiverPlayer.Name}.");
+						receiverPlayer.SendSuccessMessage($"You have received {payment} {config.CurrencyName.Value}/s from {player.Name}.");
+						break;
+					}
+
+					player.SendErrorMessage("You dont have enough amount for this payment!");
+					return;
 
 				case "resetall":
 					if (!player.Group.HasPermission("jgranserver.admin"))
@@ -387,149 +505,14 @@ namespace JgransEconomySystem
 			}
 		}
 
-		private void SetupShopCommand(CommandArgs args)
-		{
-			var player = args.Player;
-			var parameters = args.Parameters;
-
-			if (parameters.Count < 4)
-			{
-				player.SendErrorMessage("Invalid command format. Usage: /setupshop <itemID> <stack> <price> <group>");
-				return;
-			}
-
-			if (!int.TryParse(parameters[0], out int item) || !int.TryParse(parameters[1], out int stack) || !int.TryParse(parameters[2], out int price))
-			{
-				player.SendErrorMessage("Invalid parameter format. Item, stack, and price must be integers.");
-				return;
-			}
-
-			var group = TShock.Groups.GetGroupByName(parameters[3]);
-			if (group == null)
-			{
-				player.SendErrorMessage("Group does not exist.");
-				return;
-			}
-
-			int itemID = item;
-			int stackSize = stack;
-			int shopPrice = price;
-			string groupName = group.Name;
-
-			player.SendSuccessMessage("Hit a switch to register the shop.");
-			player.SetData("SwitchShopItemID", itemID);
-			player.SetData("SwitchShopStackSize", stackSize);
-			player.SetData("SwitchShopPrice", shopPrice);
-			player.SetData("SwitchAllowedGroup", groupName);
-			player.SetData("IsSettingUpShop", true);
-		}
-
-		private void SetupSellCommand(CommandArgs args)
-		{
-			var player = args.Player;
-			var parameters = args.Parameters;
-
-			if (parameters.Count < 3)
-			{
-				player.SendErrorMessage("Invalid command format. Usage: /sellcommand <command> <price> <group>");
-				return;
-			}
-
-			string command = parameters[0];
-			if (string.IsNullOrWhiteSpace(command))
-			{
-				player.SendErrorMessage("Invalid command value.");
-				return;
-			}
-
-			if (!int.TryParse(parameters[1], out int price))
-			{
-				player.SendErrorMessage("Invalid parameter format. Price must be an integer.");
-				return;
-			}
-
-			var group = TShock.Groups.GetGroupByName(parameters[2]);
-			if (group == null)
-			{
-				player.SendErrorMessage("Group does not exist.");
-				return;
-			}
-
-			player.SendSuccessMessage("Hit a switch to register the shop.");
-			player.SetData("SwitchShopCommand", command);
-			player.SetData("SwitchShopPrice", price);
-			player.SetData("SwitchAllowedGroup", group.Name);
-			player.SetData("IsSetupSellCommand", true);
-		}
-
-		private void DeleteItemShopCommand(CommandArgs args)
-		{
-			var player = args.Player;
-			player.SendSuccessMessage("Hit a switch to delete the shop.");
-			player.SetData("IsDeletingUpShop", true);
-		}
-
-		private void DeleteShopCommand(CommandArgs args)
-		{
-			var player = args.Player;
-			player.SendSuccessMessage("Hit a switch to delete the shop.");
-			player.SetData("IsDeletingUpCommandShop", true);
-		}
-
-		private void AddAllowedGroupCommand(CommandArgs args)
-		{
-			var player = args.Player;
-
-			if (args.Parameters.Count == 0)
-			{
-				player.SendErrorMessage("Invalid syntax! Proper syntax: /shopallow <rank1> <rank2> <rank3> ...");
-				return;
-			}
-
-			List<string> allowedGroups = new List<string>();
-
-			foreach (var rankName in args.Parameters)
-			{
-				var group = TShock.Groups.GetGroupByName(rankName);
-				if (group == null)
-				{
-					player.SendErrorMessage($"Group '{rankName}' does not exist.");
-					return;
-				}
-				allowedGroups.Add(group.Name);
-			}
-
-			player.SendSuccessMessage("Hit a switch to add new group allowed to the shop.");
-
-			var allowedGroupsJson = JsonConvert.SerializeObject(allowedGroups);
-			player.SetData("NewAllowedGroup", allowedGroupsJson);
-			player.SetData("AddAllowedGroup", true);
-		}
-
 		private void OnNetGetData(GetDataEventArgs args)
 		{
 			TSPlayer player = TShock.Players[args.Msg.whoAmI];
 
-			if (args.MsgID == PacketTypes.HitSwitch)
-			{
-				if (player != null)
-				{
-					HandleHitSwitchPacket(player, args);
-				}
-			}
-
 			if (args.MsgID == PacketTypes.SpawnBossorInvasion)
 			{
 				spawned = true;
-				TSPlayer.All.SendInfoMessage("Reward Counter Set to 1");
-			}
-
-			if (args.MsgID == PacketTypes.ChestOpen)
-			{
-				if (player != null)
-				{
-					HandleOnChestOpen(player, args);
-				}
+				TSPlayer.All.SendInfoMessage("Boss Spawned! The one who gets the last hit gets the jspoints!");
 			}
 		}
 
@@ -558,7 +541,7 @@ namespace JgransEconomySystem
 
 						// Perform your desired actions
 						spawned = true;
-						TSPlayer.All.SendInfoMessage("Reward Counter Set to 1");
+						TSPlayer.All.SendInfoMessage("Boss Spawned! The one who gets the last hit gets the jspoints!");
 
 						// Access the player who executed the command
 						var player = TShock.Players[args.Who];
@@ -576,193 +559,5 @@ namespace JgransEconomySystem
 				}
 			}
 		}
-
-		private async void HandleHitSwitchPacket(TSPlayer player, GetDataEventArgs args)
-		{
-			if (player == null || player.Account == null)
-			{
-				// Player or player account is null, handle the situation accordingly
-				return;
-			}
-
-			using (MemoryStream stream = new MemoryStream(args.Msg.readBuffer, args.Index, args.Length))
-			using (BinaryReader reader = new BinaryReader(stream))
-			{
-				int switchX = reader.ReadInt16();
-				int switchY = reader.ReadInt16();
-
-				if (player.GetData<bool>("IsSettingUpShop"))
-				{
-					int itemID = player.GetData<int>("SwitchShopItemID");
-					int stackSize = player.GetData<int>("SwitchShopStackSize");
-					int shopPrice = player.GetData<int>("SwitchShopPrice");
-					string groupName = player.GetData<string>("SwitchAllowedGroup");
-					byte switchStyle = reader.ReadByte();
-					int switchWorldID = Main.worldID;
-
-					await bank.SaveShopToDatabase(switchX, switchY, itemID, stackSize, shopPrice, groupName, switchWorldID);
-
-					player.SendSuccessMessage("Shop successfully registered.");
-					player.RemoveData("SwitchShopItemID");
-					player.RemoveData("SwitchShopStackSize");
-					player.RemoveData("SwitchShopPrice");
-					player.RemoveData("SwitchAllowedGroup");
-					player.RemoveData("IsSettingUpShop");
-					return;
-				}
-
-				if (player.GetData<bool>("IsSetupSellCommand"))
-				{
-					string command = player.GetData<string>("SwitchShopCommand");
-					int shopPrice = player.GetData<int>("SwitchShopPrice");
-					string groupName = player.GetData<string>("SwitchAllowedGroup");
-					byte switchStyle = reader.ReadByte();
-					int switchWorldID = Main.worldID;
-
-					await bank.AddCommandToShop(switchX, switchY, command, shopPrice, groupName, switchWorldID);
-
-					player.SendSuccessMessage("Shop successfully registered.");
-					player.RemoveData("SwitchShopCommand");
-					player.RemoveData("SwitchShopPrice");
-					player.RemoveData("SwitchAllowedGroup");
-					player.RemoveData("IsSetupSellCommand");
-					return;
-				}
-
-				if (player.GetData<bool>("AddAllowedGroup"))
-				{
-					var shop = await bank.GetShopFromDatabase(switchX, switchY, true, true);
-					if (shop != null)
-					{
-						var allowedGroups = shop.AllowedGroup.Split(',');
-						var newGroupsJson = player.GetData<string>("NewAllowedGroup");
-						var newGroups = JsonConvert.DeserializeObject<List<string>>(newGroupsJson);
-
-						foreach (var newGroup in newGroups)
-						{
-							if (!allowedGroups.Contains(newGroup))
-							{
-								allowedGroups = allowedGroups.Append(newGroup).ToArray();
-								var updatedAllowedGroups = string.Join(",", allowedGroups);
-
-								await bank.UpdateAllowedGroup(shop.X, shop.Y, updatedAllowedGroups, true, true);
-
-								player.SendSuccessMessage($"Successfully added group '{newGroup}' to the shop at coordinates ({shop.X}, {shop.Y}).");
-							}
-							else
-							{
-								player.SendInfoMessage($"Group '{newGroup}' is already allowed for the shop at coordinates ({shop.X}, {shop.Y}).");
-							}
-						}
-					}
-					else
-					{
-						player.SendErrorMessage($"Shop not found at coordinates ({switchX}, {switchY}).");
-					}
-
-					player.RemoveData("NewAllowedGroup");
-					player.RemoveData("AddAllowedGroup");
-					return;
-				}
-
-				if (player.GetData<bool>("IsDeletingUpShop"))
-				{
-					var shop = await bank.GetShopFromDatabase(switchX, switchY, true, false);
-					if (shop != null)
-					{
-						await bank.DeleteShopFromDatabase(switchX, switchY, true, false);
-						player.SendSuccessMessage("Shop deleted successfully.");
-					}
-					else
-					{
-						player.SendErrorMessage("Shop not found at the specified coordinates.");
-					}
-
-					player.RemoveData("IsDeletingUpShop");
-					return;
-				}
-
-				if (player.GetData<bool>("IsDeletingUpCommandShop"))
-				{
-					var shop = await bank.GetShopFromDatabase(switchX, switchY, false, true);
-					if (shop != null)
-					{
-						await bank.DeleteShopFromDatabase(switchX, switchY, false, true);
-						player.SendSuccessMessage("Shop deleted successfully.");
-					}
-					else
-					{
-						player.SendErrorMessage("Shop not found at the specified coordinates.");
-					}
-
-					player.RemoveData("IsDeletingUpCommandShop");
-					return;
-				}
-
-				await Transaction.HandleSwitchTransaction(switchX, switchY, player.Account.ID, true, true);
-			}
-		}
-
-		private void SetupBuyerChest(CommandArgs args)
-		{
-			var player = args.Player;
-
-			player.SendSuccessMessage("Open the chest you want to set as the buyer chest.");
-
-			player.SetData("IsSettingUpBuyerChest", true);
-		}
-
-		private async void HandleOnChestOpen(TSPlayer player, GetDataEventArgs args)
-		{
-			int chestX = args.Msg.readBuffer[args.Index + 1];
-			int chestY = args.Msg.readBuffer[args.Index + 2];
-
-			if (args.Handled || args.MsgID != PacketTypes.ChestOpen || player == null)
-				return;
-
-			if (player.GetData<bool>("IsSettingUpBuyerChest"))
-			{
-				await bank.AddBuyerChestAsync(chestX, chestY);
-
-				player.SendInfoMessage("Buyer chest set up at coordinates {0}, {1}", chestX, chestY);
-				player.RemoveData("IsSettingUpBuyerChest");
-			}
-			else
-			{
-				var buyerChest = await bank.GetBuyerChests(chestX, chestY);
-				if (buyerChest == null)
-				return;
-				
-				player.SendInfoMessage("You are using a buyer chest. Put the items you want to sell inside the chest.");
-			}
-		}
-
-		// private static async void HandleOnChestClose(TSPlayer player, GetDataEventArgs args)
-		// {
-		// 	if (args.Handled || args.MsgID != PacketTypes.ChestOpen || player == null)
-		// 		return;
-
-		// 	// Check if the player interacted with a buyer chest
-		// 	int buyerChestX = player.GetData<int>("BuyerChestX");
-		// 	int buyerChestY = player.GetData<int>("BuyerChestY");
-		// 	string buyerChestInteractor = player.GetData<string>("BuyerChestInteractor");
-		// 	if (buyerChestX == chestX && buyerChestY == chestY)
-		// 	{
-		// 		// Retrieve the chest object using the coordinates
-		// 		Chest chest = Main.chest[buyerChestX, buyerChestY];
-
-		// 		// Calculate the total price for the items in the buyer chest
-		// 		int totalPrice = CalculateTotalPrice(chest);
-
-		// 		// Perform the transaction and remove the items
-		// 		await PerformTransaction(player, totalPrice, chest);
-
-		// 		// Remove the stored data related to the buyer chest
-		// 		player.RemoveData("BuyerChestX");
-		// 		player.RemoveData("BuyerChestY");
-		// 		player.RemoveData("BuyerChestInteractor");
-		// 	}
-		// }
-
 	}
 }
