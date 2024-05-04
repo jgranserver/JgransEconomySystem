@@ -10,6 +10,11 @@ namespace JgransEconomySystem
 {
 	public class JgransEconomySystemConfig
 	{
+		public ConfigProperty<bool> ToggleEconomy { get; set; } = new ConfigProperty<bool>
+		{
+			Description = "Enable(true) or Disable(false)",
+			Value = true
+		};
 		public ConfigProperty<string> CurrencyName { get; set; } = new ConfigProperty<string>
 		{
 			Description = "The name of the currency used",

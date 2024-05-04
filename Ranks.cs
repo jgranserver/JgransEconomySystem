@@ -5,12 +5,14 @@ using TShockAPI.DB;
 
 namespace JgransEconomySystem
 {
-    public class Rank
+	public class Rank
 	{
-		private static string path = Path.Combine(TShock.SavePath, "JgransEconomyBanks.sqlite");
-		private static string tshockPath = Path.Combine(TShock.SavePath, "tshock.sqlite");
+		private static readonly string path = Path.Combine(TShock.SavePath, "JgransEconomyBanks.sqlite");
+		private static readonly string transaction = Path.Combine(TShock.SavePath, "EconomyTransactions.sqlite");
+		
+		private static readonly string tshockPath = Path.Combine(TShock.SavePath, "tshock.sqlite");
 
-		private static EconomyDatabase bank = new EconomyDatabase(path);
+		private static EconomyDatabase bank = new EconomyDatabase(path, transaction);
 
 		public string Name { get; set; }
 		public int RequiredCurrencyAmount { get; set; }

@@ -6,6 +6,7 @@ using TShockAPI.DB;
 using System.IO.Streams;
 using Newtonsoft.Json;
 using Terraria.ID;
+using Terraria.GameContent.UI;
 
 namespace JgransEconomySystem
 {
@@ -13,7 +14,7 @@ namespace JgransEconomySystem
 	public class JgransEconomySystem : TerrariaPlugin
 	{
 		private EconomyDatabase bank;
-		private JgransEconomySystemConfig config;		
+		private JgransEconomySystemConfig config;
 		private string path = Path.Combine(TShock.SavePath, "JgransEconomyBanks.sqlite");
 		private string configPath = Path.Combine(TShock.SavePath, "JgransEconomySystemConfig.json");
 
@@ -52,6 +53,7 @@ namespace JgransEconomySystem
 			Commands.ChatCommands.Add(new Command("jgranserver.admin", DeleteItemShopCommand, "delshop"));
 			Commands.ChatCommands.Add(new Command("jgranserver.admin", DeleteShopCommand, "delcommandshop"));
 			Commands.ChatCommands.Add(new Command("jgranserver.admin", SetupSellCommand, "sellcommand"));
+			Commands.ChatCommands.Add(new Command("jgranserver.admin", SetupBuyerChest, "setbuyer", "sbchest"));
 			Commands.ChatCommands.Add(new Command("yourcommandname", ReloadConfigCommand, "economyreload", "er"));
 
 			Rank.Initialize();
@@ -110,6 +112,12 @@ namespace JgransEconomySystem
 		private async Task Economy(SendDataEventArgs args)
 		{
 			config = new JgransEconomySystemConfig();
+			
+			if(config.ToggleEconomy.Value)
+			{
+				return;
+			}
+			
 			var data = args.MsgId;
 			var npcIndex = args.number;
 
@@ -201,7 +209,7 @@ namespace JgransEconomySystem
 
 						int balance = await bank.GetCurrencyAmount(player.Account.ID);
 						int newBalance = balance + currencyAmount;
-						await bank.RecordTransaction(player.Name, reason, currencyAmount);
+						await EconomyDatabase.RecordTransaction(player.Name, reason, currencyAmount);
 						player.SendData(PacketTypes.CreateCombatTextExtended, $"{currencyAmount} {config.CurrencyName.Value}", (int)Color.LightBlue.PackedValue, player.X, player.Y);
 						await bank.SaveCurrencyAmount(player.Account.ID, newBalance);
 					}
@@ -500,9 +508,10 @@ namespace JgransEconomySystem
 
 		private void OnNetGetData(GetDataEventArgs args)
 		{
+			TSPlayer player = TShock.Players[args.Msg.whoAmI];
+
 			if (args.MsgID == PacketTypes.HitSwitch)
 			{
-				TSPlayer player = TShock.Players[args.Msg.whoAmI];
 				if (player != null)
 				{
 					HandleHitSwitchPacket(player, args);
@@ -513,6 +522,14 @@ namespace JgransEconomySystem
 			{
 				spawned = true;
 				TSPlayer.All.SendInfoMessage("Reward Counter Set to 1");
+			}
+
+			if (args.MsgID == PacketTypes.ChestOpen)
+			{
+				if (player != null)
+				{
+					HandleOnChestOpen(player, args);
+				}
 			}
 		}
 
@@ -685,5 +702,67 @@ namespace JgransEconomySystem
 				await Transaction.HandleSwitchTransaction(switchX, switchY, player.Account.ID, true, true);
 			}
 		}
+
+		private void SetupBuyerChest(CommandArgs args)
+		{
+			var player = args.Player;
+
+			player.SendSuccessMessage("Open the chest you want to set as the buyer chest.");
+
+			player.SetData("IsSettingUpBuyerChest", true);
+		}
+
+		private async void HandleOnChestOpen(TSPlayer player, GetDataEventArgs args)
+		{
+			int chestX = args.Msg.readBuffer[args.Index + 1];
+			int chestY = args.Msg.readBuffer[args.Index + 2];
+
+			if (args.Handled || args.MsgID != PacketTypes.ChestOpen || player == null)
+				return;
+
+			if (player.GetData<bool>("IsSettingUpBuyerChest"))
+			{
+				await bank.AddBuyerChestAsync(chestX, chestY);
+
+				player.SendInfoMessage("Buyer chest set up at coordinates {0}, {1}", chestX, chestY);
+				player.RemoveData("IsSettingUpBuyerChest");
+			}
+			else
+			{
+				var buyerChest = await bank.GetBuyerChests(chestX, chestY);
+				if (buyerChest == null)
+				return;
+				
+				player.SendInfoMessage("You are using a buyer chest. Put the items you want to sell inside the chest.");
+			}
+		}
+
+		// private static async void HandleOnChestClose(TSPlayer player, GetDataEventArgs args)
+		// {
+		// 	if (args.Handled || args.MsgID != PacketTypes.ChestOpen || player == null)
+		// 		return;
+
+		// 	// Check if the player interacted with a buyer chest
+		// 	int buyerChestX = player.GetData<int>("BuyerChestX");
+		// 	int buyerChestY = player.GetData<int>("BuyerChestY");
+		// 	string buyerChestInteractor = player.GetData<string>("BuyerChestInteractor");
+		// 	if (buyerChestX == chestX && buyerChestY == chestY)
+		// 	{
+		// 		// Retrieve the chest object using the coordinates
+		// 		Chest chest = Main.chest[buyerChestX, buyerChestY];
+
+		// 		// Calculate the total price for the items in the buyer chest
+		// 		int totalPrice = CalculateTotalPrice(chest);
+
+		// 		// Perform the transaction and remove the items
+		// 		await PerformTransaction(player, totalPrice, chest);
+
+		// 		// Remove the stored data related to the buyer chest
+		// 		player.RemoveData("BuyerChestX");
+		// 		player.RemoveData("BuyerChestY");
+		// 		player.RemoveData("BuyerChestInteractor");
+		// 	}
+		// }
+
 	}
 }
