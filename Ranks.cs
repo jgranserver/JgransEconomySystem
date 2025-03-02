@@ -23,13 +23,31 @@ namespace JgransEconomySystem
 
 		public static void Initialize()
 		{
-			Commands.ChatCommands.Add(new Command("jgranserver.admin", AddRankCommand, "rankadd"));
-			Commands.ChatCommands.Add(new Command("jgranserver.admin", DeleteRankCommand, "rankdel"));
-			Commands.ChatCommands.Add(new Command("jgranserver.admin", RankUpdateNextRankCommand, "ranknext"));
-			Commands.ChatCommands.Add(new Command("jgranserver.admin", UpdateRankRequireCurrencyCommand, "rankcost"));
-			Commands.ChatCommands.Add(new Command("jgranserver.admin", RankDownCommand, "rankdown"));
-			Commands.ChatCommands.Add(new Command("jgraneconomy.system", ShowRankNames, "ranks"));
-			Commands.ChatCommands.Add(new Command("jgraneconomy.system", RankUpCommand, "rankup"));
+			var adminCommands = new (string, CommandDelegate)[]
+			{
+				("rankadd", AddRankCommand),
+				("rankdel", DeleteRankCommand),
+				("ranknext", RankUpdateNextRankCommand),
+				("rankcost", UpdateRankRequireCurrencyCommand),
+				("rankdown", RankDownCommand),
+				("rankdownall", RankDownAllCommand)
+			};
+
+			foreach (var (name, cmd) in adminCommands)
+			{
+				Commands.ChatCommands.Add(new Command("jgranserver.admin", cmd, name));
+			}
+
+			var playerCommands = new (string, CommandDelegate)[]
+			{
+				("ranks", ShowRankNames),
+				("rankup", RankUpCommand)
+			};
+
+			foreach (var (name, cmd) in playerCommands)
+			{
+				Commands.ChatCommands.Add(new Command("jgranserver.player", cmd, name));
+			}
 		}
 
 		private static async void AddRankCommand(CommandArgs args)
@@ -291,6 +309,42 @@ namespace JgransEconomySystem
 			{
 				args.Player.SendErrorMessage($"The group '{newGroupName}' does not exist.");
 			}
+		}
+
+		private static async void RankDownAllCommand(CommandArgs args)
+		{
+			var player = args.Player;
+			var ranks = await bank.GetRanks();
+			var userAccounts = new UserAccountManager(new SqliteConnection($"Data Source={tshockPath}")).GetUserAccounts();
+
+			foreach (var user in userAccounts)
+			{
+				var currentRank = ranks.FirstOrDefault(r => r.Name == user.Group);
+				if (currentRank != null)
+				{
+					var previousRank = ranks.FirstOrDefault(r => r.Name == currentRank.NextRank);
+					if (previousRank != null)
+					{
+						var twoRanksDown = ranks.FirstOrDefault(r => r.Name == previousRank.NextRank);
+						if (twoRanksDown != null)
+						{
+							TShock.UserAccounts.SetUserGroup(user, twoRanksDown.GroupName);
+							continue;
+						}
+						else
+						{
+							TShock.UserAccounts.SetUserGroup(user, previousRank.GroupName);
+							continue;
+						}
+					}
+					else
+					{
+						player.SendInfoMessage($"Player {user.Name} is already at the lowest rank.");
+					}
+				}
+			}
+
+			player.SendSuccessMessage("All players have been demoted by two ranks where possible.");
 		}
 	}
 }

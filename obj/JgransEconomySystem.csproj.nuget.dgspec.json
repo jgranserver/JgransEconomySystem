@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "D:\\Projects\\JgransEconomySystem\\JgransEconomySystem.csproj": {}
+    "C:\\Users\\jgran\\Documents\\TShock Projects\\JgransEconomySystem\\JgransEconomySystem.csproj": {}
   },
   "projects": {
-    "D:\\Projects\\JgransEconomySystem\\JgransEconomySystem.csproj": {
+    "C:\\Users\\jgran\\Documents\\TShock Projects\\JgransEconomySystem\\JgransEconomySystem.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "D:\\Projects\\JgransEconomySystem\\JgransEconomySystem.csproj",
+        "projectUniqueName": "C:\\Users\\jgran\\Documents\\TShock Projects\\JgransEconomySystem\\JgransEconomySystem.csproj",
         "projectName": "JgransEconomySystem",
-        "projectPath": "D:\\Projects\\JgransEconomySystem\\JgransEconomySystem.csproj",
+        "projectPath": "C:\\Users\\jgran\\Documents\\TShock Projects\\JgransEconomySystem\\JgransEconomySystem.csproj",
         "packagesPath": "C:\\Users\\jgran\\.nuget\\packages\\",
-        "outputPath": "D:\\Projects\\JgransEconomySystem\\obj\\",
+        "outputPath": "C:\\Users\\jgran\\Documents\\TShock Projects\\JgransEconomySystem\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\jgran\\AppData\\Roaming\\NuGet\\NuGet.Config"
@@ -40,7 +40,7 @@
           "dependencies": {
             "TShock": {
               "target": "Package",
-              "version": "[5.2.0, )"
+              "version": "[5.2.2, )"
             }
           },
           "imports": [
@@ -59,7 +59,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\6.0.408\\RuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\6.0.427\\RuntimeIdentifierGraph.json"
         }
       }
     }

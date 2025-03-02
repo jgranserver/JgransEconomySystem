@@ -18,6 +18,7 @@ namespace JgransEconomySystem
 		private JgransEconomySystemConfig config;
 		private string path = Path.Combine(TShock.SavePath, "JgransEconomyBanks.sqlite");
 		private string configPath = Path.Combine(TShock.SavePath, "JgransEconomySystemConfig.json");
+		private bool EconomyOnline;
 
 		public JgransEconomySystem(Main game) : base(game)
 		{
@@ -26,7 +27,7 @@ namespace JgransEconomySystem
 
 		public override string Name => "JgransEconomySystem";
 
-		public override Version Version => new Version(4, 0);
+		public override Version Version => new Version(5, 0);
 
 		public override string Author => "jgranserver";
 
@@ -45,6 +46,7 @@ namespace JgransEconomySystem
 			ServerApi.Hooks.NetSendData.Register(this, EconomyAsync);
 			ServerApi.Hooks.NetGetData.Register(this, OnNetGetData);
 			ServerApi.Hooks.ServerChat.Register(this, OnServerChat);
+			ServerApi.Hooks.ServerJoin.Register(this, OnPlayerJoin);
 
 			GetDataHandlers.TileEdit += OnTileEdit;
 
@@ -53,7 +55,12 @@ namespace JgransEconomySystem
 
 			Rank.Initialize();
 			Transaction.InitializeTransactionDataAsync();
+			UpdateEconomyStatus();
+		}
 
+		private void UpdateEconomyStatus()
+		{
+			EconomyOnline = config.ToggleEconomy.Value;
 		}
 
 		private async void EconomyCommandsAsync(CommandArgs args)
@@ -79,6 +86,7 @@ namespace JgransEconomySystem
 				ServerApi.Hooks.NetSendData.Deregister(this, EconomyAsync);
 				ServerApi.Hooks.NetGetData.Deregister(this, OnNetGetData);
 				ServerApi.Hooks.ServerChat.Deregister(this, OnServerChat);
+				ServerApi.Hooks.ServerJoin.Deregister(this, OnPlayerJoin);
 
 				GetDataHandlers.TileEdit -= OnTileEdit;
 
@@ -101,15 +109,18 @@ namespace JgransEconomySystem
 
 			// Inform server admins or log the config reload
 			TShock.Log.ConsoleInfo("JgransEconomySystemConfig has been reloaded.");
+
+			// Update the EconomyOnline flag
+			UpdateEconomyStatus();
 		}
 
 		public static bool spawned = false;
 
+		private Dictionary<int, DateTime> lastNpcStrikeTime = new Dictionary<int, DateTime>();
+
 		private async Task Economy(SendDataEventArgs args)
 		{
 			config = new JgransEconomySystemConfig();
-			bool EconomyOnline = config.ToggleEconomy.Value;
-
 			if (!EconomyOnline)
 			{
 				return;
@@ -148,6 +159,18 @@ namespace JgransEconomySystem
 				case PacketTypes.NpcStrike:
 					if (npc == null || npc.life > 0)
 						return;
+
+					// Check for delay or lag
+					if (lastNpcStrikeTime.ContainsKey(player.Index))
+					{
+						var lastStrike = lastNpcStrikeTime[player.Index];
+						if ((DateTime.Now - lastStrike).TotalMilliseconds < 500)
+						{
+							// If the last strike was less than 500ms ago, ignore this strike
+							return;
+						}
+					}
+					lastNpcStrikeTime[player.Index] = DateTime.Now;
 
 					int randomizer = Main.rand.Next(101);
 					int currencyAmount = 0;
@@ -267,14 +290,6 @@ namespace JgransEconomySystem
 					{
 						if (isHardmode)
 							currencyAmount = (int)(currencyAmount * 1.2);
-
-						bool accountExists = await bank.PlayerAccountExists(player.Account.ID);
-						if (!accountExists)
-						{
-							await bank.AddPlayerAccount(player.Account.ID, 0);
-							player.SendInfoMessage($"{config.ServerName.Value} Economy System Running!");
-							player.SendInfoMessage("A new bank account has been created for your account.");
-						}
 
 						int balance = await bank.GetCurrencyAmount(player.Account.ID);
 						int newBalance = balance + currencyAmount;
@@ -557,6 +572,21 @@ namespace JgransEconomySystem
 						// Perform any necessary error handling or notification
 					}
 				}
+			}
+		}
+
+		private async void OnPlayerJoin(JoinEventArgs args)
+		{
+			var player = TShock.Players[args.Who];
+			if (player == null || !player.IsLoggedIn)
+				return;
+
+			bool accountExists = await bank.PlayerAccountExists(player.Account.ID);
+			if (!accountExists)
+			{
+				await bank.AddPlayerAccount(player.Account.ID, 0);
+				player.SendInfoMessage($"{config.ServerName.Value} Economy System Running!");
+				player.SendInfoMessage("A new bank account has been created for your account.");
 			}
 		}
 	}

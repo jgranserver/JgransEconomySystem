@@ -7,15 +7,15 @@
     <NuGetPackageRoot Condition=" '$(NuGetPackageRoot)' == '' ">$(UserProfile)\.nuget\packages\</NuGetPackageRoot>
     <NuGetPackageFolders Condition=" '$(NuGetPackageFolders)' == '' ">C:\Users\jgran\.nuget\packages\</NuGetPackageFolders>
     <NuGetProjectStyle Condition=" '$(NuGetProjectStyle)' == '' ">PackageReference</NuGetProjectStyle>
-    <NuGetToolVersion Condition=" '$(NuGetToolVersion)' == '' ">6.3.2</NuGetToolVersion>
+    <NuGetToolVersion Condition=" '$(NuGetToolVersion)' == '' ">6.3.4</NuGetToolVersion>
   </PropertyGroup>
   <ItemGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
     <SourceRoot Include="C:\Users\jgran\.nuget\packages\" />
   </ItemGroup>
   <ItemGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
-    <None Include="$(NuGetPackageRoot)tshock\5.2.0\contentFiles\any\net6.0\HttpServer.dll" Condition="Exists('$(NuGetPackageRoot)tshock\5.2.0\contentFiles\any\net6.0\HttpServer.dll')">
+    <None Include="$(NuGetPackageRoot)tshock\5.2.2\contentFiles\any\net6.0\HttpServer.dll" Condition="Exists('$(NuGetPackageRoot)tshock\5.2.2\contentFiles\any\net6.0\HttpServer.dll')">
       <NuGetPackageId>TShock</NuGetPackageId>
-      <NuGetPackageVersion>5.2.0</NuGetPackageVersion>
+      <NuGetPackageVersion>5.2.2</NuGetPackageVersion>
       <NuGetItemType>None</NuGetItemType>
       <Pack>false</Pack>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
