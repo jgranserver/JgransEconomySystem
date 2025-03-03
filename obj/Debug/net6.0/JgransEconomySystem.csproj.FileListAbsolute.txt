@@ -24,3 +24,16 @@ C:\Users\jgran\Documents\TShock Projects\JgransEconomySystem-main\obj\Debug\net6
 C:\Users\jgran\Documents\TShock Projects\JgransEconomySystem-main\obj\Debug\net6.0\refint\JgransEconomySystem.dll
 C:\Users\jgran\Documents\TShock Projects\JgransEconomySystem-main\obj\Debug\net6.0\JgransEconomySystem.pdb
 C:\Users\jgran\Documents\TShock Projects\JgransEconomySystem-main\obj\Debug\net6.0\ref\JgransEconomySystem.dll
+C:\Users\jgran\Documents\TShock Projects\JgransEconomySystem\bin\Debug\net6.0\HttpServer.dll
+C:\Users\jgran\Documents\TShock Projects\JgransEconomySystem\bin\Debug\net6.0\JgransEconomySystem.deps.json
+C:\Users\jgran\Documents\TShock Projects\JgransEconomySystem\bin\Debug\net6.0\JgransEconomySystem.dll
+C:\Users\jgran\Documents\TShock Projects\JgransEconomySystem\bin\Debug\net6.0\JgransEconomySystem.pdb
+C:\Users\jgran\Documents\TShock Projects\JgransEconomySystem\obj\Debug\net6.0\JgransEconomySystem.csproj.AssemblyReference.cache
+C:\Users\jgran\Documents\TShock Projects\JgransEconomySystem\obj\Debug\net6.0\JgransEconomySystem.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\jgran\Documents\TShock Projects\JgransEconomySystem\obj\Debug\net6.0\JgransEconomySystem.AssemblyInfoInputs.cache
+C:\Users\jgran\Documents\TShock Projects\JgransEconomySystem\obj\Debug\net6.0\JgransEconomySystem.AssemblyInfo.cs
+C:\Users\jgran\Documents\TShock Projects\JgransEconomySystem\obj\Debug\net6.0\JgransEconomySystem.csproj.CoreCompileInputs.cache
+C:\Users\jgran\Documents\TShock Projects\JgransEconomySystem\obj\Debug\net6.0\JgransEconomySystem.dll
+C:\Users\jgran\Documents\TShock Projects\JgransEconomySystem\obj\Debug\net6.0\refint\JgransEconomySystem.dll
+C:\Users\jgran\Documents\TShock Projects\JgransEconomySystem\obj\Debug\net6.0\JgransEconomySystem.pdb
+C:\Users\jgran\Documents\TShock Projects\JgransEconomySystem\obj\Debug\net6.0\ref\JgransEconomySystem.dll

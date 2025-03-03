@@ -8,6 +8,7 @@ using Newtonsoft.Json;
 using Terraria.ID;
 using Terraria.GameContent.UI;
 using SQLitePCL;
+using System.Text;
 
 namespace JgransEconomySystem
 {
@@ -27,7 +28,7 @@ namespace JgransEconomySystem
 
 		public override string Name => "JgransEconomySystem";
 
-		public override Version Version => new Version(5, 0);
+		public override Version Version => new Version(5, 2);
 
 		public override string Author => "jgranserver";
 
@@ -52,6 +53,7 @@ namespace JgransEconomySystem
 
 			Commands.ChatCommands.Add(new Command("jgraneconomy.system", EconomyCommandsAsync, "bank"));
 			Commands.ChatCommands.Add(new Command("jgraneconomy.admin", ReloadConfigCommand, "economyreload", "er"));
+			Commands.ChatCommands.Add(new Command("jgraneconomy.system", LeaderboardCommandAsync, "leaderboard")); // Register the leaderboard command
 
 			Rank.Initialize();
 			Transaction.InitializeTransactionDataAsync();
@@ -89,7 +91,6 @@ namespace JgransEconomySystem
 				ServerApi.Hooks.ServerJoin.Deregister(this, OnPlayerJoin);
 
 				GetDataHandlers.TileEdit -= OnTileEdit;
-
 			}
 			base.Dispose(disposing);
 		}
@@ -291,11 +292,20 @@ namespace JgransEconomySystem
 						if (isHardmode)
 							currencyAmount = (int)(currencyAmount * 1.2);
 
-						int balance = await bank.GetCurrencyAmount(player.Account.ID);
-						int newBalance = balance + currencyAmount;
-						await Transaction.RecordTransaction(player.Name, reason, currencyAmount);
-						player.SendData(PacketTypes.CreateCombatTextExtended, $"{currencyAmount} {config.CurrencyName.Value}", (int)Color.LightBlue.PackedValue, player.X, player.Y);
-						await bank.SaveCurrencyAmount(player.Account.ID, newBalance);
+						try
+						{
+							int balance = await bank.GetCurrencyAmount(player.Account.ID);
+							int newBalance = balance + currencyAmount;
+							await bank.UpdateCurrencyAmount(player.Account.ID, newBalance);
+							await Transaction.RecordTransaction(player.Name, reason, currencyAmount);
+							player.SendData(PacketTypes.CreateCombatTextExtended, 
+								$"{currencyAmount} {config.CurrencyName.Value}", 
+								(int)Color.LightBlue.PackedValue, player.X, player.Y);
+						}
+						catch (Exception ex)
+						{
+							TShock.Log.Error($"Error updating currency in Economy: {ex.Message}");
+						}
 					}
 					break;
 
@@ -327,197 +337,249 @@ namespace JgransEconomySystem
 
 			if (cmd.Count == 0)
 			{
-				player.SendMessage("Bank commands:", Color.LightBlue);
-				player.SendMessage("/bank bal", Color.LightBlue);
-				player.SendMessage("/bank pay", Color.LightBlue);
-				if (player.Group.HasPermission("jgranserver.admin"))
-				{
-					player.SendMessage("/bank resetall", Color.LightBlue);
-					player.SendMessage("/bank check", Color.LightBlue);
-				}
+				ShowHelpCommands(player);
 				return;
 			}
 
-			switch (cmd[0])
+			switch (cmd[0].ToLower())
 			{
 				case "bal":
-					var bal = await bank.GetCurrencyAmount(player.Account.ID);
-					player.SendMessage($"Bank Balance: [c/#00FF6E:{bal}] {config.CurrencyName.Value}/s", Color.LightBlue);
+					await HandleBalanceCommand(player);
 					break;
 
 				case "check":
-					var target = TShock.UserAccounts.GetUserAccountByName(cmd[1]);
-					int targetBal = 0;
-					bool targetIdExist;
-
-					if (!player.Group.HasPermission("jgranserver.admin"))
-					{
-						player.SendErrorMessage("You dont have the right to check other player bank accounts.");
-						return;
-					}
-
-					if (cmd.Count < 2)
-					{
-						player.SendErrorMessage("Command invalid.\n/bank check <playername>");
-						return;
-					}
-
-					try
-					{
-						targetIdExist = await bank.PlayerAccountExists(target.ID);
-
-						if (targetIdExist)
-							targetBal = await bank.GetCurrencyAmount(target.ID);
-					}
-					catch (NullReferenceException)
-					{
-						player.SendErrorMessage("Player does not have a bank account or does not exist.");
-						return;
-					}
-
-					player.SendMessage($"{target.Name}'s Balance: {targetBal} {config.CurrencyName.Value}/s", Color.LightBlue);
+					await HandleCheckCommand(player, cmd);
 					break;
 
 				case "give":
-					if (cmd.Count < 3)
-					{
-						player.SendErrorMessage("Command invalid.\n/bank give <playername> <amount>");
-						return;
-					}
-
-					if (!player.Group.HasPermission("jgranserver.admin"))
-					{
-						player.SendErrorMessage("You don't have the right to add balance to other players' bank accounts.");
-						return;
-					}
-
-					var targetPlayerName = cmd[1];
-					var addToBalance = Convert.ToInt32(cmd[2]);
-
-					var targetPlayer = TShock.UserAccounts.GetUserAccountByName(targetPlayerName);
-					if (targetPlayer == null)
-					{
-						player.SendErrorMessage("Player does not exist.");
-						return;
-					}
-
-					var targetIdExistGive = await bank.PlayerAccountExists(targetPlayer.ID);
-					if (!targetIdExistGive)
-						await bank.AddPlayerAccount(targetPlayer.ID, 0);
-
-					var targetBalGive = await bank.GetCurrencyAmount(targetPlayer.ID);
-					var newBalance = targetBalGive + addToBalance;
-					player.SendInfoMessage($"Successfully added {addToBalance} {config.CurrencyName.Value}/s to the account of {targetPlayer.Name}");
-					await bank.SaveCurrencyAmount(targetPlayer.ID, newBalance);
+					await HandleGiveCommand(player, cmd);
 					break;
 
 				case "giveall":
-					if (!player.HasPermission("jgranserver.admin"))
-					{
-						return;
-					}
-
-					if (int.TryParse(cmd[1], out int amount))
-					{
-						if (amount != 0)
-						{
-							foreach (var p in TShock.UserAccounts.GetUserAccounts())
-							{
-								var exist = await bank.PlayerAccountExists(p.ID);
-								var _p = TSPlayer.All;
-
-								if (exist)
-								{
-									var playerBalance = await bank.GetCurrencyAmount(p.ID);
-									newBalance = playerBalance + amount;
-
-									await bank.SaveCurrencyAmount(p.ID, newBalance);
-
-									if (_p.IsLoggedIn)
-									{
-										_p.SendSuccessMessage("Received {0} jspoints as reward.", amount);
-									}
-								}
-							}
-							player.SendSuccessMessage("Successfully added {0} jspoints for each players bank.", amount);
-						}
-					}
-					else
-					{
-						player.SendErrorMessage("Command failed to execute. Please contact the admin.");
-					}
+					await HandleGiveAllCommand(player, cmd);
 					break;
 
 				case "pay":
-					if (cmd.Count < 3 || !int.TryParse(cmd[2], out int payment) || payment <= 0)
-					{
-						player.SendErrorMessage("Invalid command format. Usage: /bank pay <playername> <amount>");
-						return;
-					}
-
-					string targetName = cmd[1];
-					UserAccount receiverAccount = TShock.UserAccounts.GetUserAccountByName(targetName);
-					if (receiverAccount == null)
-					{
-						player.SendErrorMessage("The specified player does not have a bank account.");
-						return;
-					}
-
-					var receiverPlayer = TShock.Players.FirstOrDefault(p => p != null && p.Account != null && p.Account.Name.Equals(targetName, StringComparison.CurrentCulture));
-					if (receiverPlayer == null)
-					{
-						player.SendErrorMessage("The specified player is not online.");
-						return;
-					}
-
-					int receiverId = receiverAccount.ID;
-					int senderId = player.Account.ID;
-
-					int receiverBalance = await bank.GetCurrencyAmount(receiverId);
-					int senderBalance = await bank.GetCurrencyAmount(senderId);
-
-					if (senderBalance >= payment)
-					{
-						int receiverNewBalance = receiverBalance + payment;
-						int senderNewBalance = senderBalance - payment;
-
-						await Transaction.ProcessTransaction(receiverId, receiverAccount.Name, payment);
-						await bank.SaveCurrencyAmount(senderId, senderNewBalance);
-
-						player.SendSuccessMessage($"You have successfully paid {payment} {config.CurrencyName.Value}/s to {receiverPlayer.Name}.");
-						receiverPlayer.SendSuccessMessage($"You have received {payment} {config.CurrencyName.Value}/s from {player.Name}.");
-						break;
-					}
-
-					player.SendErrorMessage("You dont have enough amount for this payment!");
-					return;
+					await HandlePayCommand(player, cmd);
+					break;
 
 				case "resetall":
-					if (!player.Group.HasPermission("jgranserver.admin"))
-					{
-						player.SendErrorMessage("You dont have the right use this command.");
-						return;
-					}
-
-					player.SendMessage($"All bank accounts has been reset.", Color.LightBlue);
-					await bank.ResetAllCurrencyAmounts();
+					await HandleResetAllCommand(player);
 					break;
 
 				case "help":
 				default:
-					if (cmd.Count == 0)
-					{
-						player.SendMessage("Bank commands:", Color.LightBlue);
-						player.SendMessage("/bank bal", Color.LightBlue);
-						player.SendMessage("/bank pay", Color.LightBlue);
-						if (player.Group.HasPermission("jgranserver.admin"))
-						{
-							player.SendMessage("/bank resetall", Color.LightBlue);
-							player.SendMessage("/bank check", Color.LightBlue);
-						}
-					}
+					ShowHelpCommands(player);
 					break;
 			}
+		}
+
+		private void ShowHelpCommands(TSPlayer player)
+		{
+			player.SendMessage("Bank commands:", Color.LightBlue);
+			player.SendMessage("/bank bal - Check your balance", Color.LightBlue);
+			player.SendMessage("/bank pay <player> <amount> - Pay another player", Color.LightBlue);
+			if (player.Group.HasPermission("jgranserver.admin"))
+			{
+				player.SendMessage("/bank resetall - Reset all balances", Color.LightBlue);
+				player.SendMessage("/bank check <player> - Check player's balance", Color.LightBlue);
+				player.SendMessage("/bank give <player> <amount> - Give currency to player", Color.LightBlue);
+				player.SendMessage("/bank giveall <amount> - Give currency to all players", Color.LightBlue);
+			}
+		}
+
+		private async Task HandleBalanceCommand(TSPlayer player)
+		{
+			try
+			{
+				var exists = await bank.PlayerAccountExists(player.Account.ID);
+				if (!exists)
+				{
+					await bank.UpdateCurrencyAmount(player.Account.ID, 0);
+					player.SendInfoMessage("A new bank account has been created for you.");
+				}
+
+				var bal = await bank.GetCurrencyAmount(player.Account.ID);
+				player.SendMessage($"Bank Balance: [c/#00FF6E:{bal}] {config.CurrencyName.Value}/s", Color.LightBlue);
+			}
+			catch (Exception ex)
+			{
+				TShock.Log.Error($"Error in HandleBalanceCommand: {ex.Message}");
+				player.SendErrorMessage("An error occurred while checking your balance.");
+			}
+		}
+
+		private async Task HandleCheckCommand(TSPlayer player, List<string> cmd)
+		{
+			if (!player.Group.HasPermission("jgranserver.admin"))
+			{
+				player.SendErrorMessage("You don't have permission to check other players' bank accounts.");
+				return;
+			}
+
+			if (cmd.Count < 2)
+			{
+				player.SendErrorMessage("Usage: /bank check <playername>");
+				return;
+			}
+
+			try
+			{
+				var targetName = cmd[1];
+				var target = TShock.UserAccounts.GetUserAccountByName(targetName);
+				if (target == null)
+				{
+					player.SendErrorMessage("Player does not exist.");
+					return;
+				}
+
+				// Log the check attempt
+				TShock.Log.Debug($"Checking balance for player ID: {target.ID}, Name: {target.Name}");
+
+				bool exists = await bank.PlayerAccountExists(target.ID);
+				TShock.Log.Debug($"Account exists check result: {exists}");
+
+				if (!exists)
+				{
+					player.SendErrorMessage("Player does not have a bank account.");
+					return;
+				}
+
+				int targetBal = await bank.GetCurrencyAmount(target.ID);
+				TShock.Log.Debug($"Retrieved balance: {targetBal}");
+
+				player.SendMessage($"{target.Name}'s Balance: {targetBal} {config.CurrencyName.Value}/s", Color.LightBlue);
+			}
+			catch (Exception ex)
+			{
+				TShock.Log.Error($"Error in HandleCheckCommand: {ex.Message}");
+				player.SendErrorMessage("An error occurred while checking the player's balance.");
+			}
+		}
+
+		private async Task HandlePayCommand(TSPlayer player, List<string> cmd)
+		{
+			if (cmd.Count < 3 || !int.TryParse(cmd[2], out int payment) || payment <= 0)
+			{
+				player.SendErrorMessage("Usage: /bank pay <playername> <amount>");
+				return;
+			}
+
+			var receiverAccount = TShock.UserAccounts.GetUserAccountByName(cmd[1]);
+			if (receiverAccount == null)
+			{
+				player.SendErrorMessage("Player does not exist.");
+				return;
+			}
+
+			var receiverPlayer = TShock.Players.FirstOrDefault(p => 
+				p?.Account?.Name.Equals(cmd[1], StringComparison.CurrentCulture) == true);
+			if (receiverPlayer == null)
+			{
+				player.SendErrorMessage("Player is not online.");
+				return;
+			}
+
+			int senderBalance = await bank.GetCurrencyAmount(player.Account.ID);
+			if (senderBalance < payment)
+			{
+				player.SendErrorMessage("Insufficient funds for this payment.");
+				return;
+			}
+
+			int receiverBalance = await bank.GetCurrencyAmount(receiverAccount.ID);
+			await bank.UpdateCurrencyAmount(player.Account.ID, senderBalance - payment);
+			await bank.UpdateCurrencyAmount(receiverAccount.ID, receiverBalance + payment);
+			await Transaction.ProcessTransaction(receiverAccount.ID, receiverAccount.Name, payment);
+
+			player.SendSuccessMessage($"Paid {payment} {config.CurrencyName.Value}/s to {receiverPlayer.Name}.");
+			receiverPlayer.SendSuccessMessage($"Received {payment} {config.CurrencyName.Value}/s from {player.Name}.");
+		}
+
+		private async Task HandleGiveCommand(TSPlayer player, List<string> cmd)
+		{
+			if (!player.Group.HasPermission("jgranserver.admin"))
+			{
+				player.SendErrorMessage("You don't have permission to give currency.");
+				return;
+			}
+
+			if (cmd.Count < 3 || !int.TryParse(cmd[2], out int amount))
+			{
+				player.SendErrorMessage("Usage: /bank give <playername> <amount>");
+				return;
+			}
+
+			var target = TShock.UserAccounts.GetUserAccountByName(cmd[1]);
+			if (target == null)
+			{
+				player.SendErrorMessage("Player does not exist.");
+				return;
+			}
+
+			try
+			{
+				// Check if account exists and create it if it doesn't
+				if (!await bank.PlayerAccountExists(target.ID))
+				{
+					await bank.UpdateCurrencyAmount(target.ID, 0);
+				}
+
+				// Get current balance and add the amount
+				var currentBalance = await bank.GetCurrencyAmount(target.ID);
+				await bank.UpdateCurrencyAmount(target.ID, currentBalance + amount);
+
+				// Record the transaction
+				await Transaction.RecordTransaction(target.Name, $"Given by {player.Account.Name}", amount);
+
+				player.SendSuccessMessage($"Added {amount} {config.CurrencyName.Value}/s to {target.Name}'s account.");
+			}
+			catch (Exception ex)
+			{
+				TShock.Log.Error($"Error in HandleGiveCommand: {ex.Message}");
+				player.SendErrorMessage("An error occurred while processing the command.");
+			}
+		}
+
+		private async Task HandleGiveAllCommand(TSPlayer player, List<string> cmd)
+		{
+			if (!player.HasPermission("jgranserver.admin"))
+			{
+				player.SendErrorMessage("You don't have permission to give currency to all players.");
+				return;
+			}
+
+			if (cmd.Count < 2 || !int.TryParse(cmd[1], out int amount) || amount == 0)
+			{
+				player.SendErrorMessage("Usage: /bank giveall <amount>");
+				return;
+			}
+
+			foreach (var account in TShock.UserAccounts.GetUserAccounts())
+			{
+				if (await bank.PlayerAccountExists(account.ID))
+				{
+					var balance = await bank.GetCurrencyAmount(account.ID);
+					await bank.UpdateCurrencyAmount(account.ID, balance + amount);
+
+					var onlinePlayer = TShock.Players.FirstOrDefault(p => p?.Account?.ID == account.ID);
+					onlinePlayer?.SendSuccessMessage($"Received {amount} {config.CurrencyName.Value}/s.");
+				}
+			}
+
+			player.SendSuccessMessage($"Added {amount} {config.CurrencyName.Value}/s to all player accounts.");
+		}
+
+		private async Task HandleResetAllCommand(TSPlayer player)
+		{
+			if (!player.Group.HasPermission("jgranserver.admin"))
+			{
+				player.SendErrorMessage("You don't have permission to reset all accounts.");
+				return;
+			}
+
+			await bank.ResetAllCurrencyAmounts();
+			player.SendMessage("All bank accounts have been reset.", Color.LightBlue);
 		}
 
 		private void OnNetGetData(GetDataEventArgs args)
@@ -581,13 +643,44 @@ namespace JgransEconomySystem
 			if (player == null || !player.IsLoggedIn)
 				return;
 
-			bool accountExists = await bank.PlayerAccountExists(player.Account.ID);
-			if (!accountExists)
+			try
 			{
-				await bank.AddPlayerAccount(player.Account.ID, 0);
-				player.SendInfoMessage($"{config.ServerName.Value} Economy System Running!");
-				player.SendInfoMessage("A new bank account has been created for your account.");
+				bool accountExists = await bank.PlayerAccountExists(player.Account.ID);
+				if (!accountExists)
+				{
+					await bank.UpdateCurrencyAmount(player.Account.ID, 0);
+					player.SendInfoMessage($"{config.ServerName.Value} Economy System Running!");
+					player.SendInfoMessage("A new bank account has been created for your account.");
+				}
+				else
+				{
+					int balance = await bank.GetCurrencyAmount(player.Account.ID);
+					player.SendInfoMessage($"{config.ServerName.Value} Economy System Running!");
+					player.SendInfoMessage($"Your current bank balance is {balance} {config.CurrencyName.Value}.");
+				}
 			}
+			catch (Exception ex)
+			{
+				TShock.Log.Error($"Error in OnPlayerJoin: {ex.Message}");
+			}
+		}
+
+		private async void LeaderboardCommandAsync(CommandArgs args)
+		{
+			int topN = 10; // Number of top players to display
+			var topPlayers = await bank.GetTopPlayersAsync(topN);
+
+			var sb = new StringBuilder();
+			sb.AppendLine($"Top Players by {config.CurrencyName.Value}:");
+			for (int i = 0; i < topPlayers.Count; i++)
+			{
+				var (playerId, currencyAmount) = topPlayers[i];
+				var player = TShock.UserAccounts.GetUserAccountByID(playerId);
+				string playerName = player?.Name ?? "Unknown";
+				sb.AppendLine($"{i + 1}. {playerName} - {currencyAmount}");
+			}
+
+			args.Player.SendInfoMessage(sb.ToString());
 		}
 	}
 }
