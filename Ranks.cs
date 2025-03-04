@@ -21,8 +21,16 @@ namespace JgransEconomySystem
 
 		// Add any additional properties or methods you need
 
-		public static void Initialize()
+		public static void Initialize(JgransEconomySystemConfig systemConfig)
 		{
+			if (systemConfig == null)
+			{
+				throw new ArgumentNullException(nameof(systemConfig), "Configuration cannot be null");
+			}
+
+			config = systemConfig;
+			TShock.Log.Info("Rank system initialized with configuration");
+
 			var adminCommands = new (string, CommandDelegate)[]
 			{
 				("rankadd", AddRankCommand),
@@ -30,7 +38,8 @@ namespace JgransEconomySystem
 				("ranknext", RankUpdateNextRankCommand),
 				("rankcost", UpdateRankRequireCurrencyCommand),
 				("rankdown", RankDownCommand),
-				("rankdownall", RankDownAllCommand)
+				("rankdownall", RankDownAllCommand),
+				("updateboard", UpdateLeaderboardCommand)
 			};
 
 			foreach (var (name, cmd) in adminCommands)
@@ -47,6 +56,59 @@ namespace JgransEconomySystem
 			foreach (var (name, cmd) in playerCommands)
 			{
 				Commands.ChatCommands.Add(new Command("jgranserver.player", cmd, name));
+			 }
+
+			// Start the timer after config is initialized
+			StartLeaderboardUpdateTimer();
+		}
+
+		// Add config initialization
+		public static void SetConfig(JgransEconomySystemConfig systemConfig)
+		{
+			config = systemConfig;
+		}
+
+		private static void StartLeaderboardUpdateTimer()
+		{
+			try
+			{
+				if (config == null)
+				{
+					throw new InvalidOperationException("Configuration is not initialized");
+				}
+
+				var now = DateTime.Now;
+				var scheduledTime = new DateTime(
+					now.Year, 
+					now.Month, 
+					now.Day, 
+					config.LeaderboardUpdateHour.Value, 
+					config.LeaderboardUpdateMinute.Value, 
+					0
+				);
+
+				// If scheduled time is in the past, add one day
+				if (scheduledTime < now)
+				{
+					scheduledTime = scheduledTime.AddDays(1);
+				}
+
+				var timeUntilFirstRun = scheduledTime - now;
+				var timer = new Timer(async _ =>
+				{
+					await UpdateLeaderboardRanks();
+				}, null, timeUntilFirstRun, TimeSpan.FromDays(1));
+
+				TShock.Log.Info($"Leaderboard ranks will update daily at {config.LeaderboardUpdateHour.Value:D2}:{config.LeaderboardUpdateMinute.Value:D2}");
+			}
+			catch (Exception ex)
+			{
+				TShock.Log.Error($"Failed to start leaderboard update timer: {ex.Message}");
+				if (ex.InnerException != null)
+				{
+					TShock.Log.Error($"Inner exception: {ex.InnerException.Message}");
+				}
+				TShock.Log.Debug($"Stack trace: {ex.StackTrace}");
 			}
 		}
 
@@ -96,55 +158,100 @@ namespace JgransEconomySystem
 
 			try
 			{
+				// Check if player has a leaderboard rank
+				if (player.Group.Name == config.Top1Rank.Value ||
+					player.Group.Name == config.Top2Rank.Value ||
+					player.Group.Name == config.Top3Rank.Value ||
+					player.Group.Name == config.Top4Rank.Value ||
+					player.Group.Name == config.Top56Rank.Value ||
+					player.Group.Name == config.Top78Rank.Value ||
+					player.Group.Name == config.Top910Rank.Value)
+				{
+					player.SendErrorMessage("You cannot use /rankup with a leaderboard rank.");
+					player.SendInfoMessage("Your rank is determined by your position on the leaderboard.");
+					return;
+				}
+
+				TShock.Log.Info($"[RankUp] Starting rankup for player {player.Name} (ID: {player.Account?.ID})");
+
+				if (config == null)
+				{
+					TShock.Log.Error("[RankUp] Config is null!");
+					player.SendErrorMessage("System configuration error. Please contact an administrator.");
+					return;
+				}
+
 				var currentCurrencyAmount = await bank.GetCurrencyAmount(player.Account.ID);
 				var ranks = await bank.GetRanks();
-				var currentRank = ranks.FirstOrDefault(r => r.Name == player.Group.Name);
-				var nextRank = ranks.FirstOrDefault(r => r.Name == currentRank?.NextRank);
-
-				if (nextRank != null)
+				
+				// Get current rank
+				var currentRank = ranks.FirstOrDefault(r => r.GroupName == player.Group.Name);
+				if (currentRank == null)
 				{
-					var tax = nextRank.RequiredCurrencyAmount * (config?.TaxRate.Value ?? 0); // Ensure config is not null
-					var requiredCurrency = nextRank.RequiredCurrencyAmount + tax - currentCurrencyAmount;
-					bool ableRankUp = requiredCurrency <= 0;
+					TShock.Log.Error($"[RankUp] No valid rank found for group {player.Group.Name}");
+					player.SendErrorMessage("You don't have a valid rank. Please contact an administrator.");
+					return;
+				}
 
-					if (ableRankUp)
-					{
-						// Process the transaction
-						var newBalance = currentCurrencyAmount - nextRank.RequiredCurrencyAmount;
-						await Transaction.ProcessTransaction(player.Account.ID, player.Name, nextRank.RequiredCurrencyAmount);
-						await bank.SaveCurrencyAmount(player.Account.ID, newBalance);
+				// Get next rank by checking NextRank property
+				var nextRank = ranks.FirstOrDefault(r => r.Name == currentRank.NextRank);
+				if (nextRank == null)
+				{
+					player.SendInfoMessage("You have reached the highest rank available.");
+					return;
+				}
 
-						var group = TShock.Groups.GetGroupByName(nextRank.GroupName);
-						if (group != null)
-						{
-							var ply = TShock.UserAccounts.GetUserAccountByName(player.Name);
-							if (ply != null)
-							{
-								TShock.UserAccounts.SetUserGroup(ply, group.ToString());
-							}
-							player.SendSuccessMessage($"Congratulations! You have been promoted to the {group.Name} rank.");
-							player.SendMessage($"Balance after ranking up: {newBalance}", Color.LightBlue);
-							return;
-						}
-						else
-						{
-							TShock.Log.Error($"Group '{nextRank.GroupName}' not found for rank promotion.");
-						}
-					}
-					else
+				// Check if this rank is beyond the maximum allowed rankup rank
+				if (currentRank.Name == config.MaximumRankUpRank.Value)
+				{
+					player.SendInfoMessage($"You have reached the maximum rank available through rankup.");
+					player.SendInfoMessage("Higher ranks are reserved for top players on the leaderboard.");
+					return;
+				}
+
+				// Calculate costs including tax
+				var tax = nextRank.RequiredCurrencyAmount * config.TaxRate.Value;
+				var totalCost = nextRank.RequiredCurrencyAmount + tax;
+
+				if (currentCurrencyAmount < totalCost)
+				{
+					var needed = totalCost - currentCurrencyAmount;
+					player.SendInfoMessage($"Current rank: {currentRank.Name}");
+					player.SendInfoMessage($"You need {needed} more {config.CurrencyName.Value} to rank up to {nextRank.Name}");
+					return;
+				}
+
+				// Process the rank up
+				var newBalance = currentCurrencyAmount - totalCost;
+				
+				// Update currency first
+				await bank.UpdateCurrencyAmount(player.Account.ID, (int)newBalance);
+				
+				// Record the transaction
+				await Transaction.RecordTransaction(player.Name, $"Rank up to {nextRank.Name}", (int)totalCost);
+
+				// Update the player's group
+				var userAccount = TShock.UserAccounts.GetUserAccountByName(player.Name);
+				if (userAccount != null)
+				{
+					TShock.UserAccounts.SetUserGroup(userAccount, nextRank.GroupName);
+					player.SendSuccessMessage($"Congratulations! You have been promoted to {nextRank.Name}!");
+					player.SendMessage($"New balance: {newBalance} {config.CurrencyName.Value}", Color.LightBlue);
+					
+					if (tax > 0)
 					{
-						player.SendInfoMessage($"Current rank: {currentRank?.Name}.");
-						player.SendInfoMessage($"You need {requiredCurrency} more currency to rank up to {nextRank.Name}.");
+						player.SendMessage($"Tax paid: {tax} {config.CurrencyName.Value}", Color.LightBlue);
 					}
 				}
 				else
 				{
-					player.SendInfoMessage("You have reached the highest rank.");
+					throw new Exception($"Could not find user account for {player.Name}");
 				}
 			}
 			catch (Exception ex)
 			{
-				TShock.Log.Error($"Error during rank up: {ex.Message}");
+				TShock.Log.Error($"[RankUp] Error during rank up for {player.Name}: {ex.Message}");
+				TShock.Log.Error($"[RankUp] Stack trace: {ex.StackTrace}");
 				player.SendErrorMessage("An error occurred during rank up. Please contact an administrator.");
 			}
 		}
@@ -345,6 +452,183 @@ namespace JgransEconomySystem
 			}
 
 			player.SendSuccessMessage("All players have been demoted by two ranks where possible.");
+		}
+
+		public static async Task UpdateLeaderboardRanks()
+		{
+			try
+			{
+				TShock.Log.Info("Starting leaderboard rank update...");
+				var topPlayers = await bank.GetTopPlayersAsync(10);
+				var allUserAccounts = TShock.UserAccounts.GetUserAccounts();
+				var qualifiedPlayers = new List<(int PlayerId, int CurrencyAmount)>();
+
+				// Filter players who have reached MaximumRankUpRank
+				foreach (var (playerId, currency) in topPlayers)
+				{
+					var account = TShock.UserAccounts.GetUserAccountByID(playerId);
+					if (account == null) continue;
+
+					var ranks = await bank.GetRanks();
+					var playerRank = ranks.FirstOrDefault(r => r.GroupName == account.Group);
+
+					// Check if player has reached or passed MaximumRankUpRank
+					if (IsQualifiedForLeaderboard(account.Group))
+					{
+						qualifiedPlayers.Add((playerId, currency));
+					}
+					else
+					{
+						TShock.Log.Info($"{account.Name} has not reached {config.MaximumRankUpRank.Value} yet, skipping leaderboard placement");
+						var player = TShock.Players.FirstOrDefault(p => p?.Account?.ID == playerId);
+						player?.SendInfoMessage($"You need to reach {config.MaximumRankUpRank.Value} rank to qualify for leaderboard rankings!");
+					}
+				}
+
+				// Sort qualified players by currency amount
+				qualifiedPlayers = qualifiedPlayers.OrderByDescending(p => p.CurrencyAmount).Take(10).ToList();
+
+				// Rest of the update logic with qualified players
+				foreach (var account in allUserAccounts)
+				{
+					if (IsLeaderboardRank(account.Group) && 
+						!qualifiedPlayers.Any(p => p.PlayerId == account.ID))
+					{
+						TShock.Log.Info($"{account.Name} is no longer in top 10, updating to {config.MaximumRankUpRank.Value}");
+						TShock.UserAccounts.SetUserGroup(account, config.MaximumRankUpRank.Value);
+
+						var onlinePlayer = TShock.Players.FirstOrDefault(p => p?.Account?.ID == account.ID);
+						onlinePlayer?.SendInfoMessage($"You are no longer in the top 10. Your rank has been set to {config.MaximumRankUpRank.Value}.");
+					}
+				}
+
+				// Update qualified players' ranks
+				for (int i = 0; i < qualifiedPlayers.Count; i++)
+				{
+					var (playerId, currency) = qualifiedPlayers[i];
+					var position = i + 1;
+
+					var userAccount = TShock.UserAccounts.GetUserAccountByID(playerId);
+					if (userAccount == null)
+					{
+						TShock.Log.Warn($"Could not find user account for player ID {playerId}");
+						continue;
+					}
+
+					string newRank = position switch
+					{
+						1 => config.Top1Rank.Value,
+						2 => config.Top2Rank.Value,
+						3 => config.Top3Rank.Value,
+						4 => config.Top4Rank.Value,
+						5 or 6 => config.Top56Rank.Value,
+						7 or 8 => config.Top78Rank.Value,
+						9 or 10 => config.Top910Rank.Value,
+						_ => config.MaximumRankUpRank.Value
+					};
+
+					if (newRank != userAccount.Group)
+					{
+						string oldRank = userAccount.Group;
+						TShock.Log.Info($"Updating {userAccount.Name} (ID: {playerId}) from {oldRank} to {newRank} (Position: {position})");
+						TShock.UserAccounts.SetUserGroup(userAccount, newRank);
+
+						// Broadcast rank changes to all online players
+						TSPlayer.All.SendInfoMessage($"{userAccount.Name} has {(position <= GetPreviousPosition(oldRank) ? "risen" : "fallen")} to position {position}!");
+
+						// Additional notification for the affected player if online
+						var player = TShock.Players.FirstOrDefault(p => p?.Account?.ID == playerId);
+						if (player != null)
+						{
+							player.SendSuccessMessage($"Your rank has been updated to {newRank} (Position: {position})!");
+							player.SendInfoMessage($"Current balance: {currency} {config.CurrencyName.Value}");
+						}
+					}
+				}
+
+				TShock.Log.Info("Leaderboard rank update completed successfully");
+			}
+			catch (Exception ex)
+			{
+				TShock.Log.Error($"Error updating leaderboard ranks: {ex.Message}");
+				TShock.Log.Error($"Stack trace: {ex.StackTrace}");
+			}
+		}
+
+		private static bool IsLeaderboardRank(string rank)
+		{
+			return rank == config.Top1Rank.Value ||
+				   rank == config.Top2Rank.Value ||
+				   rank == config.Top3Rank.Value ||
+				   rank == config.Top4Rank.Value ||
+				   rank == config.Top56Rank.Value ||
+				   rank == config.Top78Rank.Value ||
+				   rank == config.Top910Rank.Value;
+		}
+
+		private static int GetPreviousPosition(string rank)
+		{
+			if (rank == config.Top1Rank.Value) return 1;
+			if (rank == config.Top2Rank.Value) return 2;
+			if (rank == config.Top3Rank.Value) return 3;
+			if (rank == config.Top4Rank.Value) return 4;
+			if (rank == config.Top56Rank.Value) return 6;
+			if (rank == config.Top78Rank.Value) return 8;
+			if (rank == config.Top910Rank.Value) return 10;
+			return 99; // Default for non-leaderboard ranks
+		}
+
+		private static bool IsQualifiedForLeaderboard(string currentRank)
+		{
+			if (IsLeaderboardRank(currentRank)) return true;
+			
+			// Check if player has reached or passed MaximumRankUpRank
+			var ranks = bank.GetRanks().Result;
+			var currentRankObj = ranks.FirstOrDefault(r => r.GroupName == currentRank);
+			if (currentRankObj == null) return false;
+
+			// Check if current rank is at least MaximumRankUpRank
+			return currentRankObj.Name == config.MaximumRankUpRank.Value || 
+				   ranks.Any(r => r.Name == config.MaximumRankUpRank.Value && 
+								 r.RequiredCurrencyAmount <= currentRankObj.RequiredCurrencyAmount);
+		}
+
+		// Add this new command method
+		private static async void UpdateLeaderboardCommand(CommandArgs args)
+		{
+			var player = args.Player;
+			int countdown = 10;
+
+			try
+			{
+				// Announce start of update
+				TSPlayer.All.SendInfoMessage($"Leaderboard rankings will update in {countdown} seconds!");
+
+				// Start countdown
+				for (int i = countdown; i > 0; i--)
+				{
+					if (i <= 5)
+					{
+						TSPlayer.All.SendInfoMessage($"Updating in {i}...");
+					}
+					await Task.Delay(1000); // Wait 1 second
+				}
+
+				TSPlayer.All.SendInfoMessage("Updating leaderboard rankings now...");
+				
+				// Perform the update
+				await UpdateLeaderboardRanks();
+				
+				TSPlayer.All.SendSuccessMessage("Leaderboard rankings have been updated!");
+
+				// Log the manual update
+				TShock.Log.Info($"Leaderboard rankings manually updated by {player.Name}");
+			 }
+			catch (Exception ex)
+			{
+				TShock.Log.Error($"Error in manual leaderboard update: {ex.Message}");
+				player.SendErrorMessage("An error occurred while updating the leaderboard rankings.");
+			}
 		}
 	}
 }

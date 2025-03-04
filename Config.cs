@@ -191,7 +191,59 @@ namespace JgransEconomySystem
 			}
 		};
 
+		public ConfigProperty<string> MaximumRankUpRank { get; set; } = new ConfigProperty<string>
+		{
+			Description = "Top 1 Rank",
+			Value = "Marquis"
+		};
+		public ConfigProperty<string> Top1Rank { get; set; } = new ConfigProperty<string>
+		{
+			Description = "Top 1 Rank",
+			Value = "Deity"
+		};
+		public ConfigProperty<string> Top2Rank { get; set; } = new ConfigProperty<string>
+		{
+			Description = "Top 2 Rank",
+			Value = "Saint"
+		};
+		public ConfigProperty<string> Top3Rank { get; set; } = new ConfigProperty<string>
+		{
+			Description = "Top 3 Rank",
+			Value = "Heirophant"
+		};
+		public ConfigProperty<string> Top4Rank { get; set; } = new ConfigProperty<string>
+		{
+			Description = "Top 4 Rank",
+			Value = "Emperor"
+		};
+		public ConfigProperty<string> Top56Rank { get; set; } = new ConfigProperty<string>
+		{
+			Description = "Top 5-6 Rank",
+			Value = "Heir"
+		};
+		public ConfigProperty<string> Top78Rank { get; set; } = new ConfigProperty<string>
+		{
+			Description = "Top 7-8 Rank",
+			Value = "Chancellor"
+		};
+		public ConfigProperty<string> Top910Rank { get; set; } = new ConfigProperty<string>
+		{
+			Description = "Top 9-10 Rank",
+			Value = "Duke"
+		};
+
 		// Add other configurable properties here
+
+		public ConfigProperty<int> LeaderboardUpdateHour { get; set; } = new ConfigProperty<int>
+		{
+			Description = "24-hour format (0-23)",
+			Value = 17
+		};
+		public ConfigProperty<int> LeaderboardUpdateMinute { get; set; } = new ConfigProperty<int>
+		{
+			Description = "(0-59)",
+			Value = 0
+		};
 
 		public static JgransEconomySystemConfig Read(string filePath)
 		{

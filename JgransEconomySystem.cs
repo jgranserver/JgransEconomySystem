@@ -9,6 +9,7 @@ using Terraria.ID;
 using Terraria.GameContent.UI;
 using SQLitePCL;
 using System.Text;
+using Terraria.GameContent.Drawing;
 
 namespace JgransEconomySystem
 {
@@ -28,7 +29,7 @@ namespace JgransEconomySystem
 
 		public override string Name => "JgransEconomySystem";
 
-		public override Version Version => new Version(5, 2);
+		public override Version Version => new Version(5, 3);
 
 		public override string Author => "jgranserver";
 
@@ -36,28 +37,75 @@ namespace JgransEconomySystem
 
 		public override void Initialize()
 		{
-			config = JgransEconomySystemConfig.Read(configPath);
-			if (!File.Exists(configPath))
+			try 
 			{
-				config.Write(configPath);
+				// Load or create config first
+				if (!File.Exists(configPath))
+				{
+					config = new JgransEconomySystemConfig();
+					config.Write(configPath);
+				}
+				else
+				{
+					config = JgransEconomySystemConfig.Read(configPath);
+				}
+
+				// Initialize database
+				bank = new EconomyDatabase(path);
+
+				// Initialize Rank system with config
+				Rank.Initialize(config);
+
+				// Register hooks
+				ServerApi.Hooks.NetSendData.Register(this, EconomyAsync);
+				ServerApi.Hooks.NetGetData.Register(this, OnNetGetData);
+				ServerApi.Hooks.ServerChat.Register(this, OnServerChat);
+				ServerApi.Hooks.ServerJoin.Register(this, OnPlayerJoin);
+				GetDataHandlers.TileEdit += OnTileEdit;
+
+				// Register commands
+				Commands.ChatCommands.Add(new Command("jgraneconomy.system", EconomyCommandsAsync, "bank"));
+				Commands.ChatCommands.Add(new Command("jgraneconomy.admin", ReloadConfigCommand, "economyreload", "er"));
+				Commands.ChatCommands.Add(new Command("jgraneconomy.system", LeaderboardCommandAsync, "leaderboard"));
+
+				// Initialize transaction system
+				Transaction.InitializeTransactionDataAsync();
+				UpdateEconomyStatus();
+
+				// Start the leaderboard update timer with proper delay
+				var now = DateTime.Now;
+				var nextUpdate = new DateTime(now.Year, now.Month, now.Day, 
+					config.LeaderboardUpdateHour.Value, 
+					config.LeaderboardUpdateMinute.Value, 0);
+
+				if (nextUpdate < now)
+				{
+					nextUpdate = nextUpdate.AddDays(1);
+				}
+
+				var delay = nextUpdate - now;
+				TShock.Log.Info($"Next leaderboard update scheduled for {nextUpdate:yyyy-MM-dd HH:mm:ss}");
+
+				Timer leaderboardTimer = new Timer(async _ =>
+				{
+					try
+					{
+						await Rank.UpdateLeaderboardRanks();
+					}
+					catch (Exception ex)
+					{
+						TShock.Log.Error($"Leaderboard update failed: {ex.Message}");
+						TShock.Log.Debug($"Stack trace: {ex.StackTrace}");
+					}
+				}, null, delay, TimeSpan.FromDays(1));
+
+				TShock.Log.Info("JgransEconomySystem initialized successfully");
 			}
-
-			bank = new EconomyDatabase(path);
-
-			ServerApi.Hooks.NetSendData.Register(this, EconomyAsync);
-			ServerApi.Hooks.NetGetData.Register(this, OnNetGetData);
-			ServerApi.Hooks.ServerChat.Register(this, OnServerChat);
-			ServerApi.Hooks.ServerJoin.Register(this, OnPlayerJoin);
-
-			GetDataHandlers.TileEdit += OnTileEdit;
-
-			Commands.ChatCommands.Add(new Command("jgraneconomy.system", EconomyCommandsAsync, "bank"));
-			Commands.ChatCommands.Add(new Command("jgraneconomy.admin", ReloadConfigCommand, "economyreload", "er"));
-			Commands.ChatCommands.Add(new Command("jgraneconomy.system", LeaderboardCommandAsync, "leaderboard")); // Register the leaderboard command
-
-			Rank.Initialize();
-			Transaction.InitializeTransactionDataAsync();
-			UpdateEconomyStatus();
+			catch (Exception ex)
+			{
+				TShock.Log.Error($"Failed to initialize JgransEconomySystem: {ex.Message}");
+				TShock.Log.Debug($"Stack trace: {ex.StackTrace}");
+			}
 		}
 
 		private void UpdateEconomyStatus()
@@ -298,9 +346,28 @@ namespace JgransEconomySystem
 							int newBalance = balance + currencyAmount;
 							await bank.UpdateCurrencyAmount(player.Account.ID, newBalance);
 							await Transaction.RecordTransaction(player.Name, reason, currencyAmount);
+							
+							 // Calculate the position above the player
+							Vector2 displayPosition = player.TPlayer.Center + new Vector2(0, -100);
+							
+							// Send combat text at the same position as the particle
 							player.SendData(PacketTypes.CreateCombatTextExtended, 
 								$"{currencyAmount} {config.CurrencyName.Value}", 
-								(int)Color.LightBlue.PackedValue, player.X, player.Y);
+								(int)Color.LightBlue.PackedValue, 
+								displayPosition.X, // Convert to tile coordinates
+								displayPosition.Y + 1);
+
+							// Spawn Lucky Coin particle effect
+							ParticleOrchestraSettings settings = new ParticleOrchestraSettings
+							{
+								IndexOfPlayerWhoInvokedThis = (byte)player.Index,
+								PositionInWorld = displayPosition, // Use the same position
+								MovementVector = Vector2.Zero, // Keep the particle stationary
+								UniqueInfoPiece = ItemID.LuckyCoin
+							};
+
+							// Broadcast the particle effect to all players
+							ParticleOrchestrator.BroadcastParticleSpawn(ParticleOrchestraType.ItemTransfer, settings);
 						}
 						catch (Exception ex)
 						{
