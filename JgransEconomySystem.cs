@@ -21,6 +21,7 @@ namespace JgransEconomySystem
 		private string path = Path.Combine(TShock.SavePath, "JgransEconomyBanks.sqlite");
 		private string configPath = Path.Combine(TShock.SavePath, "JgransEconomySystemConfig.json");
 		private bool EconomyOnline;
+		private int lastWorldId = -1;
 
 		public JgransEconomySystem(Main game) : base(game)
 		{
@@ -29,7 +30,7 @@ namespace JgransEconomySystem
 
 		public override string Name => "JgransEconomySystem";
 
-		public override Version Version => new Version(5, 3);
+		public override Version Version => new Version(5, 4);
 
 		public override string Author => "jgranserver";
 
@@ -62,11 +63,13 @@ namespace JgransEconomySystem
 				ServerApi.Hooks.ServerChat.Register(this, OnServerChat);
 				ServerApi.Hooks.ServerJoin.Register(this, OnPlayerJoin);
 				GetDataHandlers.TileEdit += OnTileEdit;
+				ServerApi.Hooks.GamePostInitialize.Register(this, OnWorldLoad);
 
 				// Register commands
 				Commands.ChatCommands.Add(new Command("jgraneconomy.system", EconomyCommandsAsync, "bank"));
 				Commands.ChatCommands.Add(new Command("jgraneconomy.admin", ReloadConfigCommand, "economyreload", "er"));
 				Commands.ChatCommands.Add(new Command("jgraneconomy.system", LeaderboardCommandAsync, "leaderboard"));
+				Commands.ChatCommands.Add(new Command("jgranserver.admin", InitializeWorldCommand, "initworld"));
 
 				// Initialize transaction system
 				Transaction.InitializeTransactionDataAsync();
@@ -137,6 +140,7 @@ namespace JgransEconomySystem
 				ServerApi.Hooks.NetGetData.Deregister(this, OnNetGetData);
 				ServerApi.Hooks.ServerChat.Deregister(this, OnServerChat);
 				ServerApi.Hooks.ServerJoin.Deregister(this, OnPlayerJoin);
+				ServerApi.Hooks.GamePostInitialize.Deregister(this, OnWorldLoad);
 
 				GetDataHandlers.TileEdit -= OnTileEdit;
 			}
@@ -734,20 +738,166 @@ namespace JgransEconomySystem
 
 		private async void LeaderboardCommandAsync(CommandArgs args)
 		{
-			int topN = 10; // Number of top players to display
-			var topPlayers = await bank.GetTopPlayersAsync(topN);
-
-			var sb = new StringBuilder();
-			sb.AppendLine($"Top Players by {config.CurrencyName.Value}:");
-			for (int i = 0; i < topPlayers.Count; i++)
+			try
 			{
-				var (playerId, currencyAmount) = topPlayers[i];
-				var player = TShock.UserAccounts.GetUserAccountByID(playerId);
-				string playerName = player?.Name ?? "Unknown";
-				sb.AppendLine($"{i + 1}. {playerName} - {currencyAmount}");
+				var leaderboardData = await bank.GetLatestLeaderboardData();
+				
+				var sb = new StringBuilder();
+				sb.AppendLine($"=== Top {config.CurrencyName.Value} Leaderboard ===");
+				
+				if (leaderboardData.Count == 0)
+				{
+					sb.AppendLine("No leaderboard data available.");
+					sb.AppendLine($"Next update scheduled for: {GetNextUpdateTime():HH:mm:ss}");
+				}
+				else
+				{
+					sb.AppendLine($"Last updated: {leaderboardData[0].UpdatedAt:yyyy-MM-dd HH:mm:ss}");
+					sb.AppendLine($"Next update in: {GetTimeUntilNextUpdate().ToString(@"hh\:mm\:ss")}");
+					sb.AppendLine("----------------------------------------");
+
+					foreach (var entry in leaderboardData)
+					{
+						string rankDisplay = GetLeaderboardRankDisplay(entry.Position);
+						sb.AppendLine($"{rankDisplay} {entry.PlayerName}: {entry.CurrencyAmount:N0} {config.CurrencyName.Value}");
+					}
+				}
+
+				args.Player.SendMessage(sb.ToString(), Color.LightGoldenrodYellow);
+			}
+			catch (Exception ex)
+			{
+				TShock.Log.Error($"Error in LeaderboardCommandAsync: {ex.Message}");
+				args.Player.SendErrorMessage("An error occurred while retrieving the leaderboard.");
+			}
+		}
+
+		private DateTime GetNextUpdateTime()
+		{
+			var now = DateTime.Now;
+			var next = new DateTime(now.Year, now.Month, now.Day, 
+				config.LeaderboardUpdateHour.Value, 
+				config.LeaderboardUpdateMinute.Value, 0);
+			
+			if (next <= now)
+				next = next.AddDays(1);
+			
+			return next;
+		}
+
+		private TimeSpan GetTimeUntilNextUpdate()
+		{
+			return GetNextUpdateTime() - DateTime.Now;
+		}
+
+		private string GetLeaderboardRankDisplay(int position)
+		{
+			return position switch
+			{
+				1 => "[c/FFD700:#1]",  // Gold
+				2 => "[c/C0C0C0:#2]",  // Silver
+				3 => "[c/CD7F32:#3]",  // Bronze
+				_ => $"#{position}"
+			};
+		}
+
+		private bool IsLeaderboardRank(string rank)
+		{
+			return rank == config.Top1Rank.Value ||
+				   rank == config.Top2Rank.Value ||
+				   rank == config.Top3Rank.Value ||
+				   rank == config.Top4Rank.Value ||
+				   rank == config.Top56Rank.Value ||
+				   rank == config.Top78Rank.Value ||
+				   rank == config.Top910Rank.Value;
+		}
+
+		private async void OnWorldLoad(EventArgs args)
+		{
+			try
+			{
+				if (config.LastWorldId.Value != -1 && config.LastWorldId.Value != Main.worldID)
+				{
+					// World has changed, reset ranks
+					await ResetRanksOnWorldChange();
+				}
+
+				// Update the stored world ID
+				config.LastWorldId.Value = Main.worldID;
+				config.Write(configPath);
+				
+				TShock.Log.Info($"World ID updated to: {Main.worldID}");
+			}
+			catch (Exception ex)
+			{
+				TShock.Log.Error($"Error in OnWorldLoad: {ex.Message}");
+			}
+		}
+
+		private async Task ResetRanksOnWorldChange()
+		{
+			try
+			{
+				TShock.Log.Info("World change detected. Starting rank reset process...");
+				var resetRank = config.WorldResetRank.Value;
+				var affectedPlayers = new List<string>();
+
+				foreach (var account in TShock.UserAccounts.GetUserAccounts())
+				{
+					// Check if player's rank is higher than the reset rank
+					var ranks = await bank.GetRanks();
+					var currentRank = ranks.FirstOrDefault(r => r.GroupName == account.Group);
+					var resetRankObj = ranks.FirstOrDefault(r => r.GroupName == resetRank);
+
+					if (currentRank == null || resetRankObj == null) continue;
+
+					// Skip if player is already at or below the reset rank
+					if (currentRank.RequiredCurrencyAmount <= resetRankObj.RequiredCurrencyAmount)
+						continue;
+
+					// Reset player's rank
+					TShock.UserAccounts.SetUserGroup(account, resetRank);
+					affectedPlayers.Add(account.Name);
+
+					// Notify online player
+					var player = TShock.Players.FirstOrDefault(p => p?.Account?.ID == account.ID);
+					if (player != null)
+					{
+						player.SendMessage($"Due to world change, your rank has been reset to {resetRank}.", Color.Orange);
+					}
+				}
+
+				// Log the reset
+				if (affectedPlayers.Count > 0)
+				{
+					TShock.Log.Info($"Reset {affectedPlayers.Count} players to {resetRank} rank:");
+					foreach (var name in affectedPlayers)
+					{
+						TShock.Log.Info($"- {name}");
+					}
+					TSPlayer.All.SendInfoMessage($"World change detected! {affectedPlayers.Count} players' ranks have been reset.");
+				}
+			}
+			catch (Exception ex)
+			{
+				TShock.Log.Error($"Error resetting ranks on world change: {ex.Message}");
+				TShock.Log.Error($"Stack trace: {ex.StackTrace}");
+			}
+		}
+
+		private void InitializeWorldCommand(CommandArgs args)
+		{
+			if (!args.Player.HasPermission("jgranserver.admin"))
+			{
+				args.Player.SendErrorMessage("You don't have permission to use this command.");
+				return;
 			}
 
-			args.Player.SendInfoMessage(sb.ToString());
+			config.LastWorldId.Value = Main.worldID;
+			config.Write(configPath);
+			
+			args.Player.SendSuccessMessage($"World ID initialized to: {Main.worldID}");
+			TShock.Log.Info($"World ID manually initialized to {Main.worldID} by {args.Player.Name}");
 		}
 	}
 }

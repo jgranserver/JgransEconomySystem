@@ -88,15 +88,25 @@ namespace JgransEconomySystem
 				);
 
 				// If scheduled time is in the past, add one day
-				if (scheduledTime < now)
+				if (scheduledTime <= now)
 				{
 					scheduledTime = scheduledTime.AddDays(1);
 				}
 
 				var timeUntilFirstRun = scheduledTime - now;
+				TShock.Log.Info($"Next leaderboard update scheduled for: {scheduledTime:yyyy-MM-dd HH:mm:ss}");
+
 				var timer = new Timer(async _ =>
 				{
-					await UpdateLeaderboardRanks();
+					try
+					{
+						await UpdateLeaderboardRanks();
+						TShock.Log.Info($"Next update scheduled for: {DateTime.Now.AddDays(1):yyyy-MM-dd HH:mm:ss}");
+					}
+					catch (Exception ex)
+					{
+						TShock.Log.Error($"Timer callback failed: {ex.Message}");
+					}
 				}, null, timeUntilFirstRun, TimeSpan.FromDays(1));
 
 				TShock.Log.Info($"Leaderboard ranks will update daily at {config.LeaderboardUpdateHour.Value:D2}:{config.LeaderboardUpdateMinute.Value:D2}");
@@ -104,10 +114,6 @@ namespace JgransEconomySystem
 			catch (Exception ex)
 			{
 				TShock.Log.Error($"Failed to start leaderboard update timer: {ex.Message}");
-				if (ex.InnerException != null)
-				{
-					TShock.Log.Error($"Inner exception: {ex.InnerException.Message}");
-				}
 				TShock.Log.Debug($"Stack trace: {ex.StackTrace}");
 			}
 		}
@@ -459,61 +465,59 @@ namespace JgransEconomySystem
 			try
 			{
 				TShock.Log.Info("Starting leaderboard rank update...");
-				var topPlayers = await bank.GetTopPlayersAsync(10);
-				var allUserAccounts = TShock.UserAccounts.GetUserAccounts();
+				var allPlayers = await bank.GetTopPlayersAsync(100); // Get more players to filter from
 				var qualifiedPlayers = new List<(int PlayerId, int CurrencyAmount)>();
+				var ranks = await bank.GetRanks();
 
-				// Filter players who have reached MaximumRankUpRank
-				foreach (var (playerId, currency) in topPlayers)
+				// First, filter qualified players
+				foreach (var (playerId, currency) in allPlayers)
 				{
 					var account = TShock.UserAccounts.GetUserAccountByID(playerId);
 					if (account == null) continue;
 
-					var ranks = await bank.GetRanks();
-					var playerRank = ranks.FirstOrDefault(r => r.GroupName == account.Group);
-
-					// Check if player has reached or passed MaximumRankUpRank
+					// Check if player is qualified (at or above MaximumRankUpRank)
 					if (IsQualifiedForLeaderboard(account.Group))
 					{
 						qualifiedPlayers.Add((playerId, currency));
+						TShock.Log.Info($"{account.Name} is qualified for leaderboard with {currency} currency");
 					}
 					else
 					{
-						TShock.Log.Info($"{account.Name} has not reached {config.MaximumRankUpRank.Value} yet, skipping leaderboard placement");
-						var player = TShock.Players.FirstOrDefault(p => p?.Account?.ID == playerId);
-						player?.SendInfoMessage($"You need to reach {config.MaximumRankUpRank.Value} rank to qualify for leaderboard rankings!");
+						TShock.Log.Info($"{account.Name} is not qualified (current rank: {account.Group})");
 					}
 				}
 
-				// Sort qualified players by currency amount
-				qualifiedPlayers = qualifiedPlayers.OrderByDescending(p => p.CurrencyAmount).Take(10).ToList();
+				// Take top 10 from qualified players only
+				var topPlayers = qualifiedPlayers
+					.OrderByDescending(p => p.CurrencyAmount)
+					.Take(10)
+					.ToList();
 
-				// Rest of the update logic with qualified players
-				foreach (var account in allUserAccounts)
+				// Reset players who are no longer in top 10
+				foreach (var userAccount in TShock.UserAccounts.GetUserAccounts())
 				{
-					if (IsLeaderboardRank(account.Group) && 
-						!qualifiedPlayers.Any(p => p.PlayerId == account.ID))
+					if (IsLeaderboardRank(userAccount.Group) && 
+						!topPlayers.Any(p => p.PlayerId == userAccount.ID))
 					{
-						TShock.Log.Info($"{account.Name} is no longer in top 10, updating to {config.MaximumRankUpRank.Value}");
-						TShock.UserAccounts.SetUserGroup(account, config.MaximumRankUpRank.Value);
+						TShock.Log.Info($"Resetting {userAccount.Name} to {config.MaximumRankUpRank.Value}");
+						TShock.UserAccounts.SetUserGroup(userAccount, config.MaximumRankUpRank.Value);
 
-						var onlinePlayer = TShock.Players.FirstOrDefault(p => p?.Account?.ID == account.ID);
-						onlinePlayer?.SendInfoMessage($"You are no longer in the top 10. Your rank has been set to {config.MaximumRankUpRank.Value}.");
+						var player = TShock.Players.FirstOrDefault(p => p?.Account?.ID == userAccount.ID);
+						if (player != null)
+						{
+							player.SendInfoMessage($"You are no longer in the top 10. Your rank has been reset to {config.MaximumRankUpRank.Value}.");
+						}
 					}
 				}
 
-				// Update qualified players' ranks
-				for (int i = 0; i < qualifiedPlayers.Count; i++)
+				// Update ranks for top players
+				for (int i = 0; i < topPlayers.Count; i++)
 				{
-					var (playerId, currency) = qualifiedPlayers[i];
+					var (playerId, currency) = topPlayers[i];
 					var position = i + 1;
 
 					var userAccount = TShock.UserAccounts.GetUserAccountByID(playerId);
-					if (userAccount == null)
-					{
-						TShock.Log.Warn($"Could not find user account for player ID {playerId}");
-						continue;
-					}
+					if (userAccount == null) continue;
 
 					string newRank = position switch
 					{
@@ -530,23 +534,34 @@ namespace JgransEconomySystem
 					if (newRank != userAccount.Group)
 					{
 						string oldRank = userAccount.Group;
-						TShock.Log.Info($"Updating {userAccount.Name} (ID: {playerId}) from {oldRank} to {newRank} (Position: {position})");
 						TShock.UserAccounts.SetUserGroup(userAccount, newRank);
+						TShock.Log.Info($"Updated {userAccount.Name} from {oldRank} to {newRank} (Position: {position})");
 
-						// Broadcast rank changes to all online players
-						TSPlayer.All.SendInfoMessage($"{userAccount.Name} has {(position <= GetPreviousPosition(oldRank) ? "risen" : "fallen")} to position {position}!");
+						// Broadcast the change
+						TSPlayer.All.SendInfoMessage($"{userAccount.Name} is now rank {position} on the leaderboard!");
 
-						// Additional notification for the affected player if online
+						// Additional notification for the affected player
 						var player = TShock.Players.FirstOrDefault(p => p?.Account?.ID == playerId);
 						if (player != null)
 						{
 							player.SendSuccessMessage($"Your rank has been updated to {newRank} (Position: {position})!");
-							player.SendInfoMessage($"Current balance: {currency} {config.CurrencyName.Value}");
+							player.SendInfoMessage($"Current balance: {currency:N0} {config.CurrencyName.Value}");
 						}
 					}
 				}
 
-				TShock.Log.Info("Leaderboard rank update completed successfully");
+				// Save leaderboard history
+				var leaderboardEntries = topPlayers.Select((p, index) => new LeaderboardEntry
+				{
+					PlayerId = p.PlayerId,
+					PlayerName = TShock.UserAccounts.GetUserAccountByID(p.PlayerId)?.Name ?? "Unknown",
+					CurrencyAmount = p.CurrencyAmount,
+					Position = index + 1,
+					UpdatedAt = DateTime.Now
+				}).ToList();
+
+				await bank.SaveLeaderboardData(leaderboardEntries);
+				TShock.Log.Info($"Leaderboard update completed. {topPlayers.Count} players ranked.");
 			}
 			catch (Exception ex)
 			{
@@ -580,17 +595,43 @@ namespace JgransEconomySystem
 
 		private static bool IsQualifiedForLeaderboard(string currentRank)
 		{
-			if (IsLeaderboardRank(currentRank)) return true;
-			
-			// Check if player has reached or passed MaximumRankUpRank
-			var ranks = bank.GetRanks().Result;
-			var currentRankObj = ranks.FirstOrDefault(r => r.GroupName == currentRank);
-			if (currentRankObj == null) return false;
+			try
+			{
+				if (IsLeaderboardRank(currentRank))
+					return true;
 
-			// Check if current rank is at least MaximumRankUpRank
-			return currentRankObj.Name == config.MaximumRankUpRank.Value || 
-				   ranks.Any(r => r.Name == config.MaximumRankUpRank.Value && 
-								 r.RequiredCurrencyAmount <= currentRankObj.RequiredCurrencyAmount);
+				var ranks = bank.GetRanks().Result;
+				var currentRankObj = ranks.FirstOrDefault(r => r.GroupName == currentRank);
+				if (currentRankObj == null)
+					return false;
+
+				// Start with MaximumRankUpRank and traverse up using NextRank
+				var maxRankObj = ranks.FirstOrDefault(r => r.Name == config.MaximumRankUpRank.Value);
+				if (maxRankObj == null)
+					return false;
+
+				// Create a list of qualified ranks starting from MaximumRankUpRank
+				var qualifiedRanks = new HashSet<string> { maxRankObj.Name };
+				
+				// Follow NextRank chain to get all higher ranks
+				string nextRankName = maxRankObj.NextRank;
+				while (!string.IsNullOrEmpty(nextRankName))
+				{
+					qualifiedRanks.Add(nextRankName);
+					var nextRank = ranks.FirstOrDefault(r => r.Name == nextRankName);
+					if (nextRank == null)
+						break;
+					nextRankName = nextRank.NextRank;
+				}
+
+				// Check if current rank is in the qualified ranks list
+				return qualifiedRanks.Contains(currentRankObj.Name);
+			}
+			catch (Exception ex)
+			{
+				TShock.Log.Error($"Error in IsQualifiedForLeaderboard: {ex.Message}");
+				return false;
+			}
 		}
 
 		// Add this new command method

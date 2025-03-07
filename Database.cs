@@ -40,6 +40,17 @@ namespace JgransEconomySystem
                     await command.ExecuteNonQueryAsync();
                 }
             }
+
+            // Add leaderboard history table
+            await ExecuteNonQueryAsync(@"
+                CREATE TABLE IF NOT EXISTS LeaderboardHistory (
+                    PlayerId INTEGER,
+                    PlayerName TEXT,
+                    CurrencyAmount INTEGER,
+                    Position INTEGER,
+                    UpdatedAt TEXT,
+                    PRIMARY KEY (PlayerId, UpdatedAt)
+                )");
         }
 
         private async Task ExecuteNonQueryAsync(string commandText, params (string, object)[] parameters)
@@ -274,6 +285,55 @@ namespace JgransEconomySystem
                                 SET RequiredCurrencyAmount = @RequiredCurrencyAmount
                                 WHERE RankName = @RankName";
             await ExecuteNonQueryAsync(commandText, ("@RequiredCurrencyAmount", requiredCurrency), ("@RankName", rankName));
+        }
+
+        public async Task SaveLeaderboardData(List<LeaderboardEntry> entries)
+        {
+            var commandText = @"
+                INSERT OR REPLACE INTO LeaderboardHistory 
+                (PlayerId, PlayerName, CurrencyAmount, Position, UpdatedAt)
+                VALUES (@PlayerId, @PlayerName, @CurrencyAmount, @Position, @UpdatedAt)";
+
+            foreach (var entry in entries)
+            {
+                await ExecuteNonQueryAsync(commandText,
+                    ("@PlayerId", entry.PlayerId),
+                    ("@PlayerName", entry.PlayerName),
+                    ("@CurrencyAmount", entry.CurrencyAmount),
+                    ("@Position", entry.Position),
+                    ("@UpdatedAt", entry.UpdatedAt.ToString("yyyy-MM-dd HH:mm:ss")));
+            }
+        }
+
+        public async Task<List<LeaderboardEntry>> GetLatestLeaderboardData()
+        {
+            var entries = new List<LeaderboardEntry>();
+            var commandText = @"
+                SELECT PlayerId, PlayerName, CurrencyAmount, Position, UpdatedAt
+                FROM LeaderboardHistory
+                WHERE UpdatedAt = (SELECT MAX(UpdatedAt) FROM LeaderboardHistory)
+                ORDER BY Position ASC";
+
+            using (var connection = new SqliteConnection(connectionString))
+            {
+                await connection.OpenAsync();
+                using (var command = new SqliteCommand(commandText, connection))
+                using (var reader = await command.ExecuteReaderAsync())
+                {
+                    while (await reader.ReadAsync())
+                    {
+                        entries.Add(new LeaderboardEntry
+                        {
+                            PlayerId = reader.GetInt32(0),
+                            PlayerName = reader.GetString(1),
+                            CurrencyAmount = reader.GetInt32(2),
+                            Position = reader.GetInt32(3),
+                            UpdatedAt = DateTime.Parse(reader.GetString(4))
+                        });
+                    }
+                }
+            }
+            return entries;
         }
     }
 }

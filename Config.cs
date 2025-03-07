@@ -245,6 +245,18 @@ namespace JgransEconomySystem
 			Value = 0
 		};
 
+		public ConfigProperty<string> WorldResetRank { get; set; } = new ConfigProperty<string>
+		{
+			Description = "The rank players will be reset to on world change",
+			Value = "Overlord"
+		};
+
+		public ConfigProperty<int> LastWorldId { get; set; } = new ConfigProperty<int>
+		{
+			Description = "The ID of the last world",
+			Value = -1
+		};
+
 		public static JgransEconomySystemConfig Read(string filePath)
 		{
 			if (File.Exists(filePath))
