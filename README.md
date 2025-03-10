@@ -1,79 +1,108 @@
-# JgransEconomySystem
+# 🎮 JgransEconomySystem - Terraria TShock Plugin
 
-JgransEconomySystem is a plugin for TShock Terraria Server that provides an economy system for your server.
+## 📝 Description
+A comprehensive economy and ranking system for Terraria servers using TShock. Features currency drops from NPCs, player banking, automatic leaderboard updates, and a dynamic rank progression system.
 
-## Features
+## ⚙️ Features
 
-- Currency system: Players can earn and spend currency.
-- Player accounts: Each player has their own currency balance.
-- Shops: Set up shops using switch mechanisms where players can buy item.
-- Command shops: Create shops using commands as the item to be sold.
-- Rank-based rewards: Define ranks and permissions earned for each ranks.
-- Configurable: Customize various aspects of the plugin through the configuration file.
+### 💰 Economy System
+- Currency drops from different NPC types
+- Configurable drop rates and amounts
+- Visual effects with Lucky Coin particles
+- Hardmode bonus multipliers
+- Anti-farming protection
 
-## Building the Plugin
+### 🏦 Banking System
+- Personal player accounts
+- Secure transactions
+- Player-to-player payments
+- Transaction history
+- Admin controls
 
-To build the plugin from source code, follow these steps:
+### 📊 Leaderboard System
+- Daily automatic updates
+- Historical data tracking
+- Top 10 player rankings
+- Special formatting for top positions
+- Countdown to next update
 
-1. Install [Visual Studio Code](https://code.visualstudio.com/) on your machine.
-2. Clone the repository to your local machine or download the source code as a ZIP file and extract it.
-3. Open Visual Studio Code and navigate to the folder containing the source code.
-4. Install the C# extension for Visual Studio Code.
-5. Open the terminal in Visual Studio Code (press `Ctrl+` backtick ` `).
-6. Run the following command to restore the NuGet packages: ```dotnet restore```
-7. Build the project by running the following command: ```dotnet build```
-8. The built plugin DLL file will be located in the `bin/Debug/net6.0` or `bin/Release/net6.0` directory, depending on the build configuration.
+### ⭐ Rank System
+- Progressive rank hierarchy
+- Automatic promotions
+- World change rank resets
+- Qualification requirements
+- Leaderboard-based ranks
 
-## Configuration
+## 🛠️ Installation
 
-The plugin uses a configuration file (`JgransEconomySystemConfig.json`) to customize its behavior. The following settings can be modified in the configuration file:
+1. Place `JgransEconomySystem.dll` in your server's `ServerPlugins` folder
+2. Start the server to generate configuration files
+3. Configure settings in `JgransEconomySystemConfig.json`
+4. Use `/initworld` command to initialize the world ID
 
-- `CurrencyName` (default: "jspoints"): The name of the currency used in the economy system.
-- `ServerName` (default: "Jgrans"): The name of your server.
-- `LowRate` (default: 30): The currency rate for low-tier rewards.
-- `MedRate` (default: 50): The currency rate for medium-tier rewards.
-- `HighRate` (default: 85): The currency rate for high-tier rewards.
-- `PerfectRate` (default: 100): The currency rate for perfect rewards.
-- `Boss3MaxAmount` (default: 1000): The maximum currency amount obtainable from defeating the third set boss (Plantera up).
-- `Boss2MaxAmount` (default: 600): The maximum currency amount obtainable from defeating the second set boss (Wall of Flesh up).
-- `Boss1MaxAmount` (default: 380): The maximum currency amount obtainable from defeating the first boss (Pre-Hardmode Bosses).
-- `SpecialMaxAmount` (default: 80): The maximum currency amount obtainable from special events or achievements.
-- `HostileMaxAmount` (default: 50): The maximum currency amount obtainable from hostile creatures.
-- `NormalMaxAmount` (default: 25): The maximum currency amount obtainable from regular gameplay.
+## 📋 Commands
 
-Modify these settings to adjust the currency rates and maximum amounts according to your server's needs.
+### Player Commands
+- `/bank bal` - Check your balance
+- `/bank pay <player> <amount>` - Pay another player
+- `/leaderboard` - View current rankings
+- `/ranks` - Show available ranks
+- `/rankup` - Attempt to rank up
 
-## Database
+### Admin Commands
+- `/initworld` - Set server world ID
+- `/updateboard` - Force leaderboard update
+- `/bank give <player> <amount>` - Give currency
+- `/bank giveall <amount>` - Give to all players
+- `/bank resetall` - Reset all balances
+- `/economyreload` or `/er` - Reload config
 
-The plugin uses a SQLite database to store player account information and shop data. The database file is named `JgransEconomyBanks.sqlite` and is located in the server's `tshock` folder.
+## ⚡ Permissions
+```
+jgraneconomy.system
+jgraneconomy.admin
+jgranserver.admin
+```
 
-## Commands
+## 🔧 Configuration
+```json
+{
+    "ServerName": "YourServer",
+    "CurrencyName": "Points",
+    "TaxRate": 0.1,
+    "ToggleEconomy": true,
+    "LeaderboardUpdateHour": 0,
+    "LeaderboardUpdateMinute": 0,
+    "WorldResetRank": "default",
+    "MaximumRankUpRank": "Elite",
+    "Top1Rank": "Champion",
+    // ...other settings
+}
+```
 
-### General Commands
+## 🎯 Features in Detail
 
-- `/bank` - Displays the bank commands.
+### NPC Currency Drops
+- **Boss NPCs**: Highest rewards, requires last hit
+- **Special NPCs**: Medium-high rewards
+- **Hostile NPCs**: Medium rewards
+- **Normal NPCs**: Low rewards
 
-### Rank Commands
+### Visual Effects
+- Lucky Coin particle effects
+- Colored combat text
+- Rank-up notifications
+- Leaderboard formatting
 
-- `/rankadd` - Adds a new rank. (Permission: jgranserver.admin)
-- `/rankdel` - Deletes a rank. (Permission: jgranserver.admin)
-- `/ranknext` - Updates the next rank of a rank. (Permission: jgranserver.admin)
-- `/rankcost` - Updates the required currency amount for a rank. (Permission: jgranserver.admin)
-- `/rankdown` - Moves a group of players in a rank to the specified rank. (Permission: jgranserver.admin)
-- `/ranks` - Displays a list of all rank names. (Permission: jgraneconomy.system)
-- `/rankup` - Promotes a player to the next rank. (Permission: jgraneconomy.system)
+### World Change System
+- Automatic rank resets
+- Configurable reset rank
+- Player notifications
+- Progress preservation options
 
-Refer to the in-game command descriptions for more information on how to use each command.
-
-## Support
-
-If you encounter any issues or have any questions, please create a new [Issue](https://github.com/jgranserver/JgransEconomySystem/issues) on the GitHub repository.
-
-## Credits
-
-- Author: jgranserver
-
-## License
-
-This plugin is released under the [MIT License](LICENSE).
-
+## 🤝 Support
+Create an issue on GitHub for:
+- Bug reports
+- Feature requests
+- Configuration help
+- General support
