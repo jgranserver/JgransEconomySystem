@@ -257,6 +257,18 @@ namespace JgransEconomySystem
 			Value = -1
 		};
 
+		public ConfigProperty<bool> WeekendBonusEnabled { get; set; } = new ConfigProperty<bool>
+		{
+			Description = "Enable or disable weekend bonus",
+			Value = true
+		};
+
+		public ConfigProperty<double> WeekendBonusMultiplier { get; set; } = new ConfigProperty<double>
+		{
+			Description = "Multiplier for weekend bonus",
+			Value = 2.0
+		};
+
 		public static JgransEconomySystemConfig Read(string filePath)
 		{
 			if (File.Exists(filePath))
