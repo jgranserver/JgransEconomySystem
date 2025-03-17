@@ -30,7 +30,7 @@ namespace JgransEconomySystem
 
 		public override string Name => "JgransEconomySystem";
 
-		public override Version Version => new Version(5, 4);
+		public override Version Version => new Version(5, 5);
 
 		public override string Author => "jgranserver";
 
@@ -341,36 +341,43 @@ namespace JgransEconomySystem
 
 					if (currencyAmount > 0)
 					{
-						if (isHardmode)
-							currencyAmount = (int)(currencyAmount * 1.2);
-
 						try
 						{
+							// Apply hardmode multiplier first
+							if (isHardmode)
+								currencyAmount = (int)(currencyAmount * 1.2);
+
+							// Apply rank multiplier
+							double rankMultiplier = GetRankMultiplier(player.Group.Name);
+							int originalAmount = currencyAmount;
+							currencyAmount = (int)(currencyAmount * rankMultiplier);
+
+							// Get current balance and update
 							int balance = await bank.GetCurrencyAmount(player.Account.ID);
 							int newBalance = balance + currencyAmount;
 							await bank.UpdateCurrencyAmount(player.Account.ID, newBalance);
 							await Transaction.RecordTransaction(player.Name, reason, currencyAmount);
 							
-							 // Calculate the position above the player
+							// Calculate the position above the player
 							Vector2 displayPosition = player.TPlayer.Center + new Vector2(0, -100);
 							
-							// Send combat text at the same position as the particle
+							// Send combat text with multiplier info if applicable
 							player.SendData(PacketTypes.CreateCombatTextExtended, 
 								$"{currencyAmount} {config.CurrencyName.Value}", 
 								(int)Color.LightBlue.PackedValue, 
-								displayPosition.X, // Convert to tile coordinates
+								displayPosition.X,
 								displayPosition.Y + 1);
 
 							// Spawn Lucky Coin particle effect
 							ParticleOrchestraSettings settings = new ParticleOrchestraSettings
 							{
 								IndexOfPlayerWhoInvokedThis = (byte)player.Index,
-								PositionInWorld = displayPosition, // Use the same position
-								MovementVector = Vector2.Zero, // Keep the particle stationary
+								PositionInWorld = displayPosition,
+								MovementVector = Vector2.Zero,
 								UniqueInfoPiece = ItemID.LuckyCoin
 							};
 
-							// Broadcast the particle effect to all players
+							// Broadcast the particle effect
 							ParticleOrchestrator.BroadcastParticleSpawn(ParticleOrchestraType.ItemTransfer, settings);
 						}
 						catch (Exception ex)
@@ -561,7 +568,7 @@ namespace JgransEconomySystem
 			int receiverBalance = await bank.GetCurrencyAmount(receiverAccount.ID);
 			await bank.UpdateCurrencyAmount(player.Account.ID, senderBalance - payment);
 			await bank.UpdateCurrencyAmount(receiverAccount.ID, receiverBalance + payment);
-			await Transaction.ProcessTransaction(receiverAccount.ID, receiverAccount.Name, payment);
+			await Transaction.RecordTransaction(receiverAccount.Name, Transaction.ReceivedFromPayment + player.Account.Name, payment);
 
 			player.SendSuccessMessage($"Paid {payment} {config.CurrencyName.Value}/s to {receiverPlayer.Name}.");
 			receiverPlayer.SendSuccessMessage($"Received {payment} {config.CurrencyName.Value}/s from {player.Name}.");
@@ -801,17 +808,6 @@ namespace JgransEconomySystem
 			};
 		}
 
-		private bool IsLeaderboardRank(string rank)
-		{
-			return rank == config.Top1Rank.Value ||
-				   rank == config.Top2Rank.Value ||
-				   rank == config.Top3Rank.Value ||
-				   rank == config.Top4Rank.Value ||
-				   rank == config.Top56Rank.Value ||
-				   rank == config.Top78Rank.Value ||
-				   rank == config.Top910Rank.Value;
-		}
-
 		private async void OnWorldLoad(EventArgs args)
 		{
 			try
@@ -898,6 +894,24 @@ namespace JgransEconomySystem
 			
 			args.Player.SendSuccessMessage($"World ID initialized to: {Main.worldID}");
 			TShock.Log.Info($"World ID manually initialized to {Main.worldID} by {args.Player.Name}");
+		}
+
+		private double GetRankMultiplier(string rankName)
+		{
+			if (string.IsNullOrEmpty(rankName))
+				return 1.0;
+
+			return rankName switch
+			{
+				var r when r == config.Top1Rank.Value => 10.0,    // 10x multiplier
+				var r when r == config.Top2Rank.Value => 8.0,     // 8x multiplier
+				var r when r == config.Top3Rank.Value => 6.0,     // 6x multiplier
+				var r when r == config.Top4Rank.Value => 4.0,     // 4x multiplier
+				var r when r == config.Top56Rank.Value => 3.0,    // 3x multiplier
+				var r when r == config.Top78Rank.Value => 2.0,    // 2x multiplier
+				var r when r == config.Top910Rank.Value => 1.5,   // 1.5x multiplier
+				_ => 1.0                                          // Default multiplier
+			};
 		}
 	}
 }
