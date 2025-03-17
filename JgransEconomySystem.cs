@@ -22,6 +22,8 @@ namespace JgransEconomySystem
 		private string configPath = Path.Combine(TShock.SavePath, "JgransEconomySystemConfig.json");
 		private bool EconomyOnline;
 		private int lastWorldId = -1;
+		private Timer weekendBonusTimer;
+		private bool isWeekendBonus = false;
 
 		public JgransEconomySystem(Main game) : base(game)
 		{
@@ -36,7 +38,7 @@ namespace JgransEconomySystem
 
 		public override string Description => "Economy system.";
 
-		public override void Initialize()
+		public override async void Initialize()
 		{
 			try 
 			{
@@ -72,7 +74,7 @@ namespace JgransEconomySystem
 				Commands.ChatCommands.Add(new Command("jgranserver.admin", InitializeWorldCommand, "initworld"));
 
 				// Initialize transaction system
-				Transaction.InitializeTransactionDataAsync();
+				await Transaction.InitializeTransactionDataAsync();
 				UpdateEconomyStatus();
 
 				// Start the leaderboard update timer with proper delay
@@ -102,6 +104,8 @@ namespace JgransEconomySystem
 					}
 				}, null, delay, TimeSpan.FromDays(1));
 
+				InitializeWeekendBonus();
+
 				TShock.Log.Info("JgransEconomySystem initialized successfully");
 			}
 			catch (Exception ex)
@@ -124,12 +128,6 @@ namespace JgransEconomySystem
 		private async void EconomyAsync(SendDataEventArgs args)
 		{
 			await Economy(args);
-		}
-
-
-		public void OnInit(EventArgs e)
-		{
-
 		}
 
 		protected override void Dispose(bool disposing)
@@ -351,6 +349,13 @@ namespace JgransEconomySystem
 							double rankMultiplier = GetRankMultiplier(player.Group.Name);
 							int originalAmount = currencyAmount;
 							currencyAmount = (int)(currencyAmount * rankMultiplier);
+
+							 // Apply weekend bonus if active
+							if (isWeekendBonus && config.WeekendBonusEnabled.Value)
+							{
+								int preWeekendBonus = currencyAmount;
+								currencyAmount = (int)(currencyAmount * config.WeekendBonusMultiplier.Value);
+							}
 
 							// Get current balance and update
 							int balance = await bank.GetCurrencyAmount(player.Account.ID);
@@ -912,6 +917,71 @@ namespace JgransEconomySystem
 				var r when r == config.Top910Rank.Value => 1.5,   // 1.5x multiplier
 				_ => 1.0                                          // Default multiplier
 			};
+		}
+
+		private void InitializeWeekendBonus()
+		{
+			// Check current status
+			UpdateWeekendBonusStatus();
+
+			// Start timer for hourly checks
+			weekendBonusTimer = new Timer(_ =>
+			{
+				CheckAndUpdateWeekendBonus();
+			}, null, TimeSpan.Zero, TimeSpan.FromHours(1));
+		}
+
+		private void CheckAndUpdateWeekendBonus()
+		{
+			try
+			{
+				bool wasWeekendBonus = isWeekendBonus;
+				UpdateWeekendBonusStatus();
+
+				var now = DateTime.Now;
+				if (isWeekendBonus)
+				{
+					if (!wasWeekendBonus)
+					{
+						// Weekend bonus just started
+						TSPlayer.All.SendMessage("Weekend Bonus has started! All currency gains are doubled!", Color.LightGreen);
+					}
+					// Regular reminder during weekend
+					TSPlayer.All.SendMessage($"Weekend Bonus is active! (x{config.WeekendBonusMultiplier.Value} currency)", Color.Yellow);
+				}
+				else
+				{
+					// Not weekend, check time until next weekend
+					var nextWeekend = GetNextWeekendStart();
+					var timeUntil = nextWeekend - now;
+					TSPlayer.All.SendMessage($"Weekend Bonus starts in {timeUntil.Days}d {timeUntil.Hours}h {timeUntil.Minutes}m", Color.Gray);
+				}
+			}
+			catch (Exception ex)
+			{
+				TShock.Log.Error($"Error in CheckAndUpdateWeekendBonus: {ex.Message}");
+			}
+		}
+
+		private void UpdateWeekendBonusStatus()
+		{
+			if (!config.WeekendBonusEnabled.Value)
+			{
+				isWeekendBonus = false;
+				return;
+			}
+
+			var now = DateTime.Now;
+			isWeekendBonus = now.DayOfWeek == DayOfWeek.Saturday || now.DayOfWeek == DayOfWeek.Sunday;
+		}
+
+		private DateTime GetNextWeekendStart()
+		{
+			var now = DateTime.Now;
+			int daysUntilSaturday = ((int)DayOfWeek.Saturday - (int)now.DayOfWeek + 7) % 7;
+			if (daysUntilSaturday == 0 && now.Hour >= 0)
+				daysUntilSaturday = 7;
+			return now.Date.AddDays(daysUntilSaturday);
 		}
 	}
 }
