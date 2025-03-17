@@ -30,7 +30,7 @@ namespace JgransEconomySystem
 
 		public override string Name => "JgransEconomySystem";
 
-		public override Version Version => new Version(5, 5);
+		public override Version Version => new Version(5, 6);
 
 		public override string Author => "jgranserver";
 
