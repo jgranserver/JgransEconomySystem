@@ -193,7 +193,7 @@ namespace JgransEconomySystem
 
 		public ConfigProperty<string> MaximumRankUpRank { get; set; } = new ConfigProperty<string>
 		{
-			Description = "Top 1 Rank",
+			Description = "Rank qualification for maximum rank up",
 			Value = "Marquis"
 		};
 		public ConfigProperty<string> Top1Rank { get; set; } = new ConfigProperty<string>
