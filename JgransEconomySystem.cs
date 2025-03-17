@@ -2,12 +2,8 @@ using TShockAPI;
 using TerrariaApi.Server;
 using Terraria;
 using Microsoft.Xna.Framework;
-using TShockAPI.DB;
-using System.IO.Streams;
 using Newtonsoft.Json;
 using Terraria.ID;
-using Terraria.GameContent.UI;
-using SQLitePCL;
 using System.Text;
 using Terraria.GameContent.Drawing;
 
@@ -21,7 +17,6 @@ namespace JgransEconomySystem
 		private string path = Path.Combine(TShock.SavePath, "JgransEconomyBanks.sqlite");
 		private string configPath = Path.Combine(TShock.SavePath, "JgransEconomySystemConfig.json");
 		private bool EconomyOnline;
-		private int lastWorldId = -1;
 		private Timer weekendBonusTimer;
 		private bool isWeekendBonus = false;
 
