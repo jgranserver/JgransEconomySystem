@@ -465,7 +465,8 @@ namespace JgransEconomySystem
 			try
 			{
 				TShock.Log.Info("Starting leaderboard rank update...");
-				var allPlayers = await bank.GetTopPlayersAsync(100); // Get more players to filter from
+				// Replace GetTopPlayersAsync with GetAllPlayersDataAsync
+				var allPlayers = await bank.GetAllPlayersDataAsync();
 				var qualifiedPlayers = new List<(int PlayerId, int CurrencyAmount)>();
 				var ranks = await bank.GetRanks();
 
