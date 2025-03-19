@@ -550,14 +550,13 @@ namespace JgransEconomySystem
 				return;
 			}
 
-			var receiverPlayer = TShock.Players.FirstOrDefault(p => 
-				p?.Account?.Name.Equals(cmd[1], StringComparison.CurrentCulture) == true);
-			if (receiverPlayer == null)
+			if(TShock.Players.FirstOrDefault(p => p?.Account?.ID == receiverAccount.ID) == null)
 			{
 				player.SendErrorMessage("Player is not online.");
 				return;
 			}
 
+			// Check sender's balance
 			int senderBalance = await bank.GetCurrencyAmount(player.Account.ID);
 			if (senderBalance < payment)
 			{
@@ -565,13 +564,29 @@ namespace JgransEconomySystem
 				return;
 			}
 
-			int receiverBalance = await bank.GetCurrencyAmount(receiverAccount.ID);
-			await bank.UpdateCurrencyAmount(player.Account.ID, senderBalance - payment);
-			await bank.UpdateCurrencyAmount(receiverAccount.ID, receiverBalance + payment);
-			await Transaction.RecordTransaction(receiverAccount.Name, Transaction.ReceivedFromPayment + player.Account.Name, payment);
+			try
+			{
+				// Get receiver's balance and update both accounts
+				int receiverBalance = await bank.GetCurrencyAmount(receiverAccount.ID);
+				await bank.UpdateCurrencyAmount(player.Account.ID, senderBalance - payment);
+				await bank.UpdateCurrencyAmount(receiverAccount.ID, receiverBalance + payment);
+				await Transaction.RecordTransaction(receiverAccount.Name, Transaction.ReceivedFromPayment + player.Account.Name, payment);
 
-			player.SendSuccessMessage($"Paid {payment} {config.CurrencyName.Value}/s to {receiverPlayer.Name}.");
-			receiverPlayer.SendSuccessMessage($"Received {payment} {config.CurrencyName.Value}/s from {player.Name}.");
+				// Send success message to sender
+				player.SendSuccessMessage($"Paid {payment} {config.CurrencyName.Value}/s to {receiverAccount.Name}.");
+
+				// If receiver is online, notify them
+				var receiverPlayer = TShock.Players.FirstOrDefault(p => p?.Account?.ID == receiverAccount.ID);
+				if (receiverPlayer != null)
+				{
+					receiverPlayer.SendSuccessMessage($"Received {payment} {config.CurrencyName.Value}/s from {player.Name}.");
+				}
+			}
+			catch (Exception ex)
+			{
+				TShock.Log.Error($"Error in HandlePayCommand: {ex.Message}");
+				player.SendErrorMessage("An error occurred while processing the payment.");
+			}
 		}
 
 		private async Task HandleGiveCommand(TSPlayer player, List<string> cmd)
