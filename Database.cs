@@ -157,27 +157,8 @@ namespace JgransEconomySystem
 
         public async Task<List<(int PlayerId, int CurrencyAmount)>> GetTopPlayersAsync(int topN)
         {
-            var topPlayers = new List<(int PlayerId, int CurrencyAmount)>();
-            var commandText = "SELECT PlayerId, CurrencyAmount FROM EconomyData ORDER BY CurrencyAmount DESC LIMIT @TopN";
-
-            using (var connection = new SqliteConnection(connectionString))
-            {
-                await connection.OpenAsync();
-                using (var command = new SqliteCommand(commandText, connection))
-                {
-                    command.Parameters.AddWithValue("@TopN", topN);
-                    using (var reader = await command.ExecuteReaderAsync())
-                    {
-                        while (reader.Read())
-                        {
-                            int playerId = reader.GetInt32(0);
-                            int currencyAmount = reader.GetInt32(1);
-                            topPlayers.Add((playerId, currencyAmount));
-                        }
-                    }
-                }
-            }
-            return topPlayers;
+            var allPlayers = await GetAllPlayersDataAsync();
+            return allPlayers.Take(topN).ToList();
         }
 
         public async Task<List<Rank>> GetRanks()
@@ -334,6 +315,39 @@ namespace JgransEconomySystem
                 }
             }
             return entries;
+        }
+
+        public async Task<List<(int PlayerId, int CurrencyAmount)>> GetAllPlayersDataAsync()
+        {
+            var players = new List<(int PlayerId, int CurrencyAmount)>();
+            var commandText = "SELECT PlayerId, CurrencyAmount FROM EconomyData ORDER BY CurrencyAmount DESC";
+
+            try
+            {
+                using (var connection = new SqliteConnection(connectionString))
+                {
+                    await connection.OpenAsync();
+                    using (var command = new SqliteCommand(commandText, connection))
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        while (await reader.ReadAsync())
+                        {
+                            int playerId = reader.GetInt32(0);
+                            int currencyAmount = reader.GetInt32(1);
+                            players.Add((playerId, currencyAmount));
+                        }
+                    }
+                }
+
+                TShock.Log.Info($"Retrieved {players.Count} player records from database");
+                return players;
+            }
+            catch (Exception ex)
+            {
+                TShock.Log.Error($"Error retrieving player data: {ex.Message}");
+                TShock.Log.Debug($"Stack trace: {ex.StackTrace}");
+                return new List<(int PlayerId, int CurrencyAmount)>();
+            }
         }
     }
 }
