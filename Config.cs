@@ -269,6 +269,12 @@ namespace JgransEconomySystem
 			Value = 2.0
 		};
 
+		public ConfigProperty<DateTime> LastLeaderboardUpdate { get; set; } = new ConfigProperty<DateTime>
+		{
+			Description = "The last time the leaderboard was updated",
+			Value = DateTime.MinValue
+		};
+
 		public static JgransEconomySystemConfig Read(string filePath)
 		{
 			if (File.Exists(filePath))
