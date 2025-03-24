@@ -1,108 +1,76 @@
-# 🎮 JgransEconomySystem - Terraria TShock Plugin
+# 🎮 JgransEconomySystem
 
 ## 📝 Description
-A comprehensive economy and ranking system for Terraria servers using TShock. Features currency drops from NPCs, player banking, automatic leaderboard updates, and a dynamic rank progression system.
+A comprehensive economy and rank progression system for Terraria TShock servers. Features currency earning, player banking, automatic leaderboard updates, and rank management.
 
-## ⚙️ Features
+## 🔑 Key Features
 
-### 💰 Economy System
-- Currency drops from different NPC types
-- Configurable drop rates and amounts
-- Visual effects with Lucky Coin particles
-- Hardmode bonus multipliers
+### 💰 Currency System
+- Tiered NPC rewards:
+  - Boss NPCs (3 tiers)
+  - Special NPCs
+  - Hostile NPCs
+  - Normal NPCs
 - Anti-farming protection
+- Hardmode multipliers
+- Weekend bonus events
 
-### 🏦 Banking System
-- Personal player accounts
-- Secure transactions
-- Player-to-player payments
-- Transaction history
-- Admin controls
-
-### 📊 Leaderboard System
-- Daily automatic updates
-- Historical data tracking
-- Top 10 player rankings
-- Special formatting for top positions
-- Countdown to next update
-
-### ⭐ Rank System
+### 🌟 Rank System
 - Progressive rank hierarchy
 - Automatic promotions
+- Rank-based multipliers (1.5x - 10x)
 - World change rank resets
 - Qualification requirements
-- Leaderboard-based ranks
 
-## 🛠️ Installation
+### 📊 Leaderboard
+- Daily automatic updates
+- Top 10 player tracking
+- Historical data storage
+- Position-based ranks
+- Consistent update schedule
 
-1. Place `JgransEconomySystem.dll` in your server's `ServerPlugins` folder
-2. Start the server to generate configuration files
-3. Configure settings in `JgransEconomySystemConfig.json`
-4. Use `/initworld` command to initialize the world ID
+### 🏦 Banking
+- Player accounts
+- Inter-player transfers
+- Transaction history
+- Admin controls
+- Balance tracking
 
-## 📋 Commands
+## ⚙️ Commands
 
 ### Player Commands
-- `/bank bal` - Check your balance
-- `/bank pay <player> <amount>` - Pay another player
-- `/leaderboard` - View current rankings
-- `/ranks` - Show available ranks
-- `/rankup` - Attempt to rank up
+```
+/bank bal - Check balance
+/bank pay <player> <amount> - Transfer currency
+/leaderboard - View rankings
+```
 
 ### Admin Commands
-- `/initworld` - Set server world ID
-- `/updateboard` - Force leaderboard update
-- `/bank give <player> <amount>` - Give currency
-- `/bank giveall <amount>` - Give to all players
-- `/bank resetall` - Reset all balances
-- `/economyreload` or `/er` - Reload config
+```
+/initworld - Set server world ID
+/updateboard - Force leaderboard update
+/bank give <player> <amount> - Give currency
+/bank giveall <amount> - Give to all
+/bank resetall - Reset balances
+/economyreload - Reload config
+```
 
-## ⚡ Permissions
+## 🔒 Permissions
 ```
 jgraneconomy.system
 jgraneconomy.admin
 jgranserver.admin
 ```
 
-## 🔧 Configuration
+## ⚡ Configuration
 ```json
 {
-    "ServerName": "YourServer",
-    "CurrencyName": "Points",
-    "TaxRate": 0.1,
-    "ToggleEconomy": true,
+    "ServerName": "string",
+    "CurrencyName": "string",
     "LeaderboardUpdateHour": 0,
     "LeaderboardUpdateMinute": 0,
-    "WorldResetRank": "default",
-    "MaximumRankUpRank": "Elite",
-    "Top1Rank": "Champion",
-    // ...other settings
+    "WorldResetRank": "string",
+    "WeekendBonusEnabled": true,
+    "WeekendBonusMultiplier": 2.0
 }
 ```
-
-## 🎯 Features in Detail
-
-### NPC Currency Drops
-- **Boss NPCs**: Highest rewards, requires last hit
-- **Special NPCs**: Medium-high rewards
-- **Hostile NPCs**: Medium rewards
-- **Normal NPCs**: Low rewards
-
-### Visual Effects
-- Lucky Coin particle effects
-- Colored combat text
-- Rank-up notifications
-- Leaderboard formatting
-
-### World Change System
-- Automatic rank resets
-- Configurable reset rank
-- Player notifications
-- Progress preservation options
-
-## 🤝 Support
-Create an issue on GitHub for:
-- Bug reports
-- Feature requests
-- Configuration help
-- General support
