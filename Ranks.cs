@@ -39,7 +39,6 @@ namespace JgransEconomySystem
 				("rankcost", UpdateRankRequireCurrencyCommand),
 				("rankdown", RankDownCommand),
 				("rankdownall", RankDownAllCommand),
-				("updateboard", UpdateLeaderboardCommand)
 			};
 
 			foreach (var (name, cmd) in adminCommands)
@@ -632,44 +631,6 @@ namespace JgransEconomySystem
 			{
 				TShock.Log.Error($"Error in IsQualifiedForLeaderboard: {ex.Message}");
 				return false;
-			}
-		}
-
-		// Add this new command method
-		private static async void UpdateLeaderboardCommand(CommandArgs args)
-		{
-			var player = args.Player;
-			int countdown = 10;
-
-			try
-			{
-				// Announce start of update
-				TSPlayer.All.SendInfoMessage($"Leaderboard rankings will update in {countdown} seconds!");
-
-				// Start countdown
-				for (int i = countdown; i > 0; i--)
-				{
-					if (i <= 5)
-					{
-						TSPlayer.All.SendInfoMessage($"Updating in {i}...");
-					}
-					await Task.Delay(1000); // Wait 1 second
-				}
-
-				TSPlayer.All.SendInfoMessage("Updating leaderboard rankings now...");
-				
-				// Perform the update
-				await UpdateLeaderboardRanks();
-				
-				TSPlayer.All.SendSuccessMessage("Leaderboard rankings have been updated!");
-
-				// Log the manual update
-				TShock.Log.Info($"Leaderboard rankings manually updated by {player.Name}");
-			 }
-			catch (Exception ex)
-			{
-				TShock.Log.Error($"Error in manual leaderboard update: {ex.Message}");
-				player.SendErrorMessage("An error occurred while updating the leaderboard rankings.");
 			}
 		}
 	}
