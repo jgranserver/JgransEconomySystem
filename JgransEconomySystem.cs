@@ -294,6 +294,17 @@ namespace JgransEconomySystem
 							int originalAmount = currencyAmount;
 							currencyAmount = (int)(currencyAmount * rankMultiplier);
 
+							// Show multiplier info if it was applied
+							if (rankMultiplier > 1)
+							{
+								Vector2 multiplierPosition = player.TPlayer.Center + new Vector2(0, -120);
+								player.SendData(PacketTypes.CreateCombatTextExtended, 
+									$"x{rankMultiplier:F1} Rank Bonus!", 
+									(int)Color.Gold.PackedValue,
+									multiplierPosition.X,
+									multiplierPosition.Y);
+							}
+
 							 // Apply weekend bonus if active
 							if (isWeekendBonus && config.WeekendBonusEnabled.Value)
 							{
@@ -871,22 +882,39 @@ namespace JgransEconomySystem
 			TShock.Log.Info($"World ID manually initialized to {Main.worldID} by {args.Player.Name}");
 		}
 
-		private double GetRankMultiplier(string rankName)
+		private double GetRankMultiplier(string groupName)
 		{
-			if (string.IsNullOrEmpty(rankName))
-				return 1.0;
-
-			return rankName switch
+			try 
 			{
-				var r when r == config.Top1Rank.Value => 10.0,    // 10x multiplier
-				var r when r == config.Top2Rank.Value => 8.0,     // 8x multiplier
-				var r when r == config.Top3Rank.Value => 6.0,     // 6x multiplier
-				var r when r == config.Top4Rank.Value => 4.0,     // 4x multiplier
-				var r when r == config.Top56Rank.Value => 3.0,    // 3x multiplier
-				var r when r == config.Top78Rank.Value => 2.0,    // 2x multiplier
-				var r when r == config.Top910Rank.Value => 1.5,   // 1.5x multiplier
-				_ => 1.0                                          // Default multiplier
-			};
+				if (string.IsNullOrEmpty(groupName))
+					return 1.0;
+
+				// Get ranks from database
+				var ranks = bank.GetRanks().Result;
+				
+				// Find the rank object that matches the player's group
+				var rank = ranks.FirstOrDefault(r => r.GroupName.Equals(groupName, StringComparison.OrdinalIgnoreCase));
+				if (rank == null)
+					return 1.0;
+
+				// Return multiplier based on rank name
+				return rank.Name switch
+				{
+					var r when r == config.Top1Rank.Value => 10.0,    // 10x multiplier
+					var r when r == config.Top2Rank.Value => 8.0,     // 8x multiplier
+					var r when r == config.Top3Rank.Value => 6.0,     // 6x multiplier
+					var r when r == config.Top4Rank.Value => 4.0,     // 4x multiplier
+					var r when r == config.Top56Rank.Value => 3.0,    // 3x multiplier
+					var r when r == config.Top78Rank.Value => 2.0,    // 2x multiplier
+					var r when r == config.Top910Rank.Value => 1.5,   // 1.5x multiplier
+					_ => 1.0                                          // Default multiplier
+				};
+			}
+			catch (Exception ex)
+			{
+				TShock.Log.Error($"Error in GetRankMultiplier: {ex.Message}");
+				return 1.0;
+			}
 		}
 
 		private void InitializeWeekendBonus()
