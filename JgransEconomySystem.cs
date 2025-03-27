@@ -29,7 +29,7 @@ namespace JgransEconomySystem
 
 		public override string Name => "JgransEconomySystem";
 
-		public override Version Version => new Version(5, 6);
+		public override Version Version => new Version(5, 6, 1);
 
 		public override string Author => "jgranserver";
 
@@ -58,6 +58,7 @@ namespace JgransEconomySystem
 				ServerApi.Hooks.ServerJoin.Register(this, OnPlayerJoin);
 				GetDataHandlers.TileEdit += OnTileEdit;
 				ServerApi.Hooks.GamePostInitialize.Register(this, OnWorldLoad);
+				ServerApi.Hooks.GameUpdate.Register(this, OnGameUpdate);
 
 				Commands.ChatCommands.Add(new Command("jgraneconomy.system", EconomyCommandsAsync, "bank"));
 				Commands.ChatCommands.Add(new Command("jgraneconomy.admin", ReloadConfigCommand, "economyreload", "er"));
@@ -67,7 +68,6 @@ namespace JgransEconomySystem
 
 				await Transaction.InitializeTransactionDataAsync();
 				InitializeWeekendBonus();
-				InitializeLeaderboardTimer();
 
 				TShock.Log.Info("JgransEconomySystem initialized successfully");
 			}
@@ -97,6 +97,7 @@ namespace JgransEconomySystem
 				ServerApi.Hooks.ServerChat.Deregister(this, OnServerChat);
 				ServerApi.Hooks.ServerJoin.Deregister(this, OnPlayerJoin);
 				ServerApi.Hooks.GamePostInitialize.Deregister(this, OnWorldLoad);
+				ServerApi.Hooks.GameUpdate.Deregister(this, OnGameUpdate);
 
 				GetDataHandlers.TileEdit -= OnTileEdit;
 				leaderboardTimer?.Dispose();
@@ -649,6 +650,13 @@ namespace JgransEconomySystem
 		private void OnServerChat(ServerChatEventArgs args)
 		{
 			string message = args.Text;
+			var player = TShock.Players[args.Who];
+			var group = player.Group;
+
+			if(!group.HasPermission("tshock.npc.summonboss"))
+			{
+				return;
+			}
 
 			// Check if the chat message starts with the command prefix (e.g., "/")
 			if (message.StartsWith("/") || message.StartsWith("."))
@@ -674,7 +682,6 @@ namespace JgransEconomySystem
 						TSPlayer.All.SendInfoMessage("Boss Spawned! The one who gets the last hit gets the jspoints!");
 
 						// Access the player who executed the command
-						var player = TShock.Players[args.Who];
 						if (player != null)
 						{
 							// You can perform additional actions specific to the player here
@@ -720,6 +727,40 @@ namespace JgransEconomySystem
 
 		private async void LeaderboardCommandAsync(CommandArgs args)
 		{
+			var player = args.Player;
+			if (player == null)
+				return;
+
+			LeaderboardCheckUpdate();
+		}
+
+		private DateTime lastCheckTime = DateTime.MinValue;
+		private const int CHECK_INTERVAL_SECONDS = 3600;
+
+		private async void OnGameUpdate(EventArgs args)
+		{
+			try
+			{
+				var now = DateTime.Now;
+				if ((now - lastCheckTime).TotalSeconds >= CHECK_INTERVAL_SECONDS)
+				{
+					lastCheckTime = now;
+					var updateTime = GetNextUpdateTime();
+					if (now >= updateTime)
+					{
+						await Rank.UpdateLeaderboardRanks();
+					}
+					LeaderboardCheckUpdate();
+				}
+			}
+			catch (Exception ex)
+			{
+				TShock.Log.Error($"Error in OnGameUpdate: {ex.Message}");
+			}
+		}
+
+		private async void LeaderboardCheckUpdate()
+		{
 			try
 			{
 				var leaderboardData = await bank.GetLatestLeaderboardData();
@@ -761,12 +802,20 @@ namespace JgransEconomySystem
 					}
 				}
 
-				args.Player.SendMessage(sb.ToString(), Color.LightGoldenrodYellow);
+				// Send to all online players
+				foreach (var player in TShock.Players.Where(p => p?.Active == true))
+				{
+					player.SendMessage(sb.ToString(), Color.LightGoldenrodYellow);
+				}
+
+				// Also log to console
+				TShock.Log.ConsoleInfo(sb.ToString());
 			}
 			catch (Exception ex)
 			{
-				TShock.Log.Error($"Error in LeaderboardCommandAsync: {ex.Message}");
-				args.Player.SendErrorMessage("An error occurred while retrieving the leaderboard.");
+				TShock.Log.Error($"Error in LeaderboardCheckUpdate: {ex.Message}");
+				TShock.Log.ConsoleError("An error occurred while retrieving the leaderboard.");
+				TSPlayer.All.SendErrorMessage("An error occurred while updating the leaderboard display.");
 			}
 		}
 
@@ -982,51 +1031,6 @@ namespace JgransEconomySystem
 			return now.Date.AddDays(daysUntilSaturday);
 		}
 
-		private void InitializeLeaderboardTimer()
-		{
-			try
-			{
-				var now = DateTime.Now;
-				var lastUpdate = config.LastLeaderboardUpdate.Value;
-				var nextUpdate = new DateTime(now.Year, now.Month, now.Day,
-					config.LeaderboardUpdateHour.Value,
-					config.LeaderboardUpdateMinute.Value, 0);
-
-				// If we missed the update today or last update was yesterday
-				if (lastUpdate.Date < now.Date || nextUpdate < now)
-				{
-					nextUpdate = nextUpdate.AddDays(1);
-				}
-
-				var delay = nextUpdate - now;
-				TShock.Log.Info($"Next leaderboard update scheduled for {nextUpdate:yyyy-MM-dd HH:mm:ss}");
-
-				leaderboardTimer = new Timer(async _ =>
-				{
-					try
-					{
-						await Rank.UpdateLeaderboardRanks();
-						
-						// Update the last update time in config
-						config.LastLeaderboardUpdate.Value = DateTime.Now;
-						config.Write(configPath);
-						
-						TShock.Log.Info($"Leaderboard updated. Next update at {GetNextUpdateTime():yyyy-MM-dd HH:mm:ss}");
-						TSPlayer.All.SendInfoMessage("Leaderboard rankings have been updated!");
-					}
-					catch (Exception ex)
-					{
-						TShock.Log.Error($"Leaderboard update failed: {ex.Message}");
-						TShock.Log.Debug($"Stack trace: {ex.StackTrace}");
-					}
-				}, null, delay, TimeSpan.FromDays(1));
-			}
-			catch (Exception ex)
-			{
-				TShock.Log.Error($"Failed to initialize leaderboard timer: {ex.Message}");
-			}
-		}
-
 		private async void UpdateLeaderboardCommand(CommandArgs args)
 		{
 			var player = args.Player;
@@ -1055,12 +1059,6 @@ namespace JgransEconomySystem
 				// Update the last update time in config
 				config.LastLeaderboardUpdate.Value = DateTime.Now;
 				config.Write(configPath);
-				
-				// Dispose old timer
-				leaderboardTimer?.Dispose();
-				
-				// Reinitialize the timer with new schedule
-				InitializeLeaderboardTimer();
 				
 				var nextUpdate = GetNextUpdateTime();
 				TSPlayer.All.SendSuccessMessage("Leaderboard rankings have been updated!");
