@@ -136,19 +136,14 @@ namespace JgransEconomySystem
 				return;
 
 			var player = players[0];
-			var unsuccessfulAttempts = player.GetData<int>("unsuccessfulAttempts");
 			var npc = Main.npc[npcIndex];
-			
-			if(npc.SpawnedFromStatue)
+
+			if (npc.SpawnedFromStatue)
 			{
 				return;
 			}
 
-			bool isHostile = NPCType.IsHostile(npc.netID);
-			bool isSpecial = NPCType.IsSpecial(npc.netID);
-			bool isBoss1 = NPCType.IsBoss1(npc.netID);
-			bool isBoss2 = NPCType.IsBoss2(npc.netID);
-			bool isBoss3 = NPCType.IsBoss3(npc.netID);
+			bool isHardmode = Main.hardMode;
 
 			switch (data)
 			{
@@ -156,130 +151,33 @@ namespace JgransEconomySystem
 					if (npc == null || npc.life > 0)
 						return;
 
-					// Check for delay or lag
+					// Anti-farming check remains the same
 					if (lastNpcStrikeTime.ContainsKey(player.Index))
 					{
 						var lastStrike = lastNpcStrikeTime[player.Index];
 						if ((DateTime.Now - lastStrike).TotalMilliseconds < 500)
-						{
-							// If the last strike was less than 500ms ago, ignore this strike
 							return;
-						}
 					}
 					lastNpcStrikeTime[player.Index] = DateTime.Now;
 
-					int randomizer = Main.rand.Next(101);
+					// New drop chance calculation
+					double dropChance = CalculateDropChance(npc, isHardmode);
+					double roll = Main.rand.NextDouble() * 100; // Roll between 0-100%
 					int currencyAmount = 0;
 					string reason = "";
 
-					bool isHardmode = Main.hardMode;
-					if (isHardmode)
-						randomizer = Main.rand.Next(86);
+					// If roll is successful, calculate currency amount
+					if (roll <= dropChance)
+					{
+						currencyAmount = CalculateCurrencyAmount(npc, isHardmode);
+						reason = GetDropReason(npc);
 
-					// Check if the randomizer value is below 20
-					if (randomizer < 20)
-					{
-						// Reset the counter if the randomizer value is below 20
-						unsuccessfulAttempts = 0;
-						player.SetData("unsuccessfulAttempts", unsuccessfulAttempts);
-					}
-					else
-					{
-						// Increment the counter if the randomizer value is not below 20
-						unsuccessfulAttempts++;
-						player.SetData("unsuccessfulAttempts", unsuccessfulAttempts);
-
-						// Check if the counter reaches the limit (5)
-						if (unsuccessfulAttempts >= 5)
+						// Announce boss kills
+						if (IsBossNPC(npc) && spawned)
 						{
-							// Set the randomizer value to 1
-							randomizer = 1;
-							unsuccessfulAttempts = 0; // Reset the counter
-							player.SetData("unsuccessfulAttempts", unsuccessfulAttempts);
+							TSPlayer.All.SendMessage($"{player.Name} received {currencyAmount} {config.CurrencyName.Value} from killing {npc.TypeName}!", Color.LightCyan);
+							spawned = false;
 						}
-					}
-
-					if (isBoss3 && spawned && randomizer <= config.PerfectRate.Value)
-					{
-						if (randomizer != 1)
-						{
-							currencyAmount = Main.rand.Next(config.Boss3MaxAmount.Value);
-						}
-						else
-						{
-							currencyAmount = config.Boss3MaxAmount.Value;
-						}
-
-						reason = Transaction.ReceivedFromKillingBossNPC;
-						TSPlayer.All.SendMessage($"{player.Name} recieved {currencyAmount} {config.CurrencyName.Value} from killing {npc.TypeName}.", Color.LightCyan);
-
-						spawned = false;
-					}
-					else if (isBoss2 && spawned && randomizer <= config.PerfectRate.Value)
-					{
-						if (randomizer != 1)
-						{
-							currencyAmount = Main.rand.Next(config.Boss2MaxAmount.Value);
-						}
-						else
-						{
-							currencyAmount = config.Boss2MaxAmount.Value;
-						}
-						reason = Transaction.ReceivedFromKillingBossNPC;
-						TSPlayer.All.SendMessage($"{player.Name} recieved {currencyAmount} {config.CurrencyName.Value} from killing {npc.TypeName}.", Color.LightCyan);
-
-						spawned = false;
-					}
-					else if (isBoss1 && spawned && randomizer <= config.PerfectRate.Value)
-					{
-						if (randomizer != 1)
-						{
-							currencyAmount = Main.rand.Next(config.Boss1MaxAmount.Value);
-						}
-						else
-						{
-							currencyAmount = config.Boss1MaxAmount.Value;
-						}
-						reason = Transaction.ReceivedFromKillingBossNPC;
-						TSPlayer.All.SendMessage($"{player.Name} recieved {currencyAmount} {config.CurrencyName.Value} from killing {npc.TypeName}.", Color.LightCyan);
-
-						spawned = false;
-					}
-					else if (isSpecial && randomizer <= config.HighRate.Value)
-					{
-						if (randomizer != 1)
-						{
-							currencyAmount = Main.rand.Next(config.SpecialMaxAmount.Value);
-						}
-						else
-						{
-							currencyAmount = config.SpecialMaxAmount.Value;
-						}
-						reason = Transaction.ReceivedFromKillingSpecialNPC;
-					}
-					else if (isHostile && randomizer <= config.MedRate.Value)
-					{
-						if (randomizer != 1)
-						{
-							currencyAmount = Main.rand.Next(config.HostileMaxAmount.Value);
-						}
-						else
-						{
-							currencyAmount = config.HostileMaxAmount.Value;
-						}
-						reason = Transaction.ReceivedFromKillingHostileNPC;
-					}
-					else if (!(isHostile || isSpecial || isBoss1 || isBoss2 || isBoss3) && randomizer <= config.LowRate.Value)
-					{
-						if (randomizer != 1)
-						{
-							currencyAmount = Main.rand.Next(config.NormalMaxAmount.Value);
-						}
-						else
-						{
-							currencyAmount = config.NormalMaxAmount.Value;
-						}
-						reason = Transaction.ReceivedFromKillingNormalNPC;
 					}
 
 					if (currencyAmount > 0)
@@ -351,6 +249,57 @@ namespace JgransEconomySystem
 				default:
 					return;
 			}
+		}
+
+		private double CalculateDropChance(NPC npc, bool isHardmode)
+		{
+			double baseChance = npc switch
+			{
+				var n when NPCType.IsBoss3(n.netID) => 100.0,  // 100% for tier 3 bosses
+				var n when NPCType.IsBoss2(n.netID) => 100.0,  // 100% for tier 2 bosses
+				var n when NPCType.IsBoss1(n.netID) => 100.0,  // 100% for tier 1 bosses
+				var n when NPCType.IsSpecial(n.netID) => 75.0, // 75% for special NPCs
+				var n when NPCType.IsHostile(n.netID) => 50.0, // 50% for hostile NPCs
+				_ => 25.0                                      // 25% for normal NPCs
+			};
+
+			// Increase chance in hardmode
+			if (isHardmode)
+				baseChance *= 1.2;
+
+			return Math.Min(baseChance, 100.0); // Cap at 100%
+		}
+
+		private int CalculateCurrencyAmount(NPC npc, bool isHardmode)
+		{
+			int baseAmount = npc switch
+			{
+				var n when NPCType.IsBoss3(n.netID) => Main.rand.Next(config.Boss3MaxAmount.Value / 2, config.Boss3MaxAmount.Value),
+				var n when NPCType.IsBoss2(n.netID) => Main.rand.Next(config.Boss2MaxAmount.Value / 2, config.Boss2MaxAmount.Value),
+				var n when NPCType.IsBoss1(n.netID) => Main.rand.Next(config.Boss1MaxAmount.Value / 2, config.Boss1MaxAmount.Value),
+				var n when NPCType.IsSpecial(n.netID) => Main.rand.Next(config.SpecialMaxAmount.Value / 2, config.SpecialMaxAmount.Value),
+				var n when NPCType.IsHostile(n.netID) => Main.rand.Next(config.HostileMaxAmount.Value / 2, config.HostileMaxAmount.Value),
+				_ => Main.rand.Next(config.NormalMaxAmount.Value / 2, config.NormalMaxAmount.Value)
+			};
+
+			return baseAmount;
+		}
+
+		private string GetDropReason(NPC npc)
+		{
+			return npc switch
+			{
+				var n when NPCType.IsBoss3(n.netID) || NPCType.IsBoss2(n.netID) || NPCType.IsBoss1(n.netID) 
+					=> Transaction.ReceivedFromKillingBossNPC,
+				var n when NPCType.IsSpecial(n.netID) => Transaction.ReceivedFromKillingSpecialNPC,
+				var n when NPCType.IsHostile(n.netID) => Transaction.ReceivedFromKillingHostileNPC,
+				_ => Transaction.ReceivedFromKillingNormalNPC
+			};
+		}
+
+		private bool IsBossNPC(NPC npc)
+		{
+			return NPCType.IsBoss1(npc.netID) || NPCType.IsBoss2(npc.netID) || NPCType.IsBoss3(npc.netID);
 		}
 
 		public void OnTileEdit(object sender, GetDataHandlers.TileEditEventArgs e)
