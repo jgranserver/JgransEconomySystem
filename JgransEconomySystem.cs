@@ -29,7 +29,7 @@ namespace JgransEconomySystem
 
 		public override string Name => "JgransEconomySystem";
 
-		public override Version Version => new Version(5, 6, 1);
+		public override Version Version => new Version(5, 6, 2);
 
 		public override string Author => "jgranserver";
 
@@ -684,7 +684,7 @@ namespace JgransEconomySystem
 		}
 
 		private DateTime lastCheckTime = DateTime.MinValue;
-		private const int CHECK_INTERVAL_SECONDS = 3600;
+		private const int CHECK_INTERVAL_SECONDS = 600;
 
 		private async void OnGameUpdate(EventArgs args)
 		{
@@ -698,6 +698,13 @@ namespace JgransEconomySystem
 					if (now >= updateTime)
 					{
 						await Rank.UpdateLeaderboardRanks();
+
+						// Update the last update time in config
+						config.LastLeaderboardUpdate.Value = now;
+						config.Write(configPath);
+						
+						TSPlayer.All.SendSuccessMessage("Leaderboard rankings have been updated!");
+						TSPlayer.All.SendInfoMessage($"Next scheduled update: {updateTime:yyyy-MM-dd HH:mm:ss}");
 					}
 					LeaderboardCheckUpdate();
 				}
