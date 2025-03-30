@@ -58,63 +58,12 @@ namespace JgransEconomySystem
 			 }
 
 			// Start the timer after config is initialized
-			StartLeaderboardUpdateTimer();
 		}
 
 		// Add config initialization
 		public static void SetConfig(JgransEconomySystemConfig systemConfig)
 		{
 			config = systemConfig;
-		}
-
-		private static void StartLeaderboardUpdateTimer()
-		{
-			try
-			{
-				if (config == null)
-				{
-					throw new InvalidOperationException("Configuration is not initialized");
-				}
-
-				var now = DateTime.Now;
-				var scheduledTime = new DateTime(
-					now.Year, 
-					now.Month, 
-					now.Day, 
-					config.LeaderboardUpdateHour.Value, 
-					config.LeaderboardUpdateMinute.Value, 
-					0
-				);
-
-				// If scheduled time is in the past, add one day
-				if (scheduledTime <= now)
-				{
-					scheduledTime = scheduledTime.AddDays(1);
-				}
-
-				var timeUntilFirstRun = scheduledTime - now;
-				TShock.Log.Info($"Next leaderboard update scheduled for: {scheduledTime:yyyy-MM-dd HH:mm:ss}");
-
-				var timer = new Timer(async _ =>
-				{
-					try
-					{
-						await UpdateLeaderboardRanks();
-						TShock.Log.Info($"Next update scheduled for: {DateTime.Now.AddDays(1):yyyy-MM-dd HH:mm:ss}");
-					}
-					catch (Exception ex)
-					{
-						TShock.Log.Error($"Timer callback failed: {ex.Message}");
-					}
-				}, null, timeUntilFirstRun, TimeSpan.FromDays(1));
-
-				TShock.Log.Info($"Leaderboard ranks will update daily at {config.LeaderboardUpdateHour.Value:D2}:{config.LeaderboardUpdateMinute.Value:D2}");
-			}
-			catch (Exception ex)
-			{
-				TShock.Log.Error($"Failed to start leaderboard update timer: {ex.Message}");
-				TShock.Log.Debug($"Stack trace: {ex.StackTrace}");
-			}
 		}
 
 		private static async void AddRankCommand(CommandArgs args)
