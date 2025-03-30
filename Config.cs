@@ -232,19 +232,6 @@ namespace JgransEconomySystem
 			Value = "Duke"
 		};
 
-		// Add other configurable properties here
-
-		public ConfigProperty<int> LeaderboardUpdateHour { get; set; } = new ConfigProperty<int>
-		{
-			Description = "24-hour format (0-23)",
-			Value = 17
-		};
-		public ConfigProperty<int> LeaderboardUpdateMinute { get; set; } = new ConfigProperty<int>
-		{
-			Description = "(0-59)",
-			Value = 0
-		};
-
 		public ConfigProperty<string> WorldResetRank { get; set; } = new ConfigProperty<string>
 		{
 			Description = "The rank players will be reset to on world change",
