@@ -64,7 +64,6 @@ namespace JgransEconomySystem
 				Commands.ChatCommands.Add(new Command("jgraneconomy.admin", ReloadConfigCommand, "economyreload", "er"));
 				Commands.ChatCommands.Add(new Command("jgraneconomy.system", LeaderboardCommandAsync, "leaderboard"));
 				Commands.ChatCommands.Add(new Command("jgranserver.admin", InitializeWorldCommand, "initworld"));
-				Commands.ChatCommands.Add(new Command("jgranserver.admin", UpdateLeaderboardCommand, "updateboard"));
 
 				await Transaction.InitializeTransactionDataAsync();
 				InitializeWeekendBonus();
@@ -676,42 +675,48 @@ namespace JgransEconomySystem
 
 		private async void LeaderboardCommandAsync(CommandArgs args)
 		{
-			var player = args.Player;
-			if (player == null)
-				return;
-
 			LeaderboardCheckUpdate();
 		}
 
 		private DateTime lastCheckTime = DateTime.MinValue;
 		private const int CHECK_INTERVAL_SECONDS = 600;
-
 		private async void OnGameUpdate(EventArgs args)
 		{
 			try
 			{
 				var now = DateTime.Now;
+				
+				// Only check every 10 minutes (600 seconds)
 				if ((now - lastCheckTime).TotalSeconds >= CHECK_INTERVAL_SECONDS)
 				{
 					lastCheckTime = now;
-					var updateTime = GetNextUpdateTime();
-					if (now >= updateTime)
-					{
-						await Rank.UpdateLeaderboardRanks();
-
-						// Update the last update time in config
-						config.LastLeaderboardUpdate.Value = now;
-						config.Write(configPath);
-						
-						TSPlayer.All.SendSuccessMessage("Leaderboard rankings have been updated!");
-						TSPlayer.All.SendInfoMessage($"Next scheduled update: {updateTime:yyyy-MM-dd HH:mm:ss}");
-					}
+					
+					// Perform leaderboard update
+					await Rank.UpdateLeaderboardRanks();
+					
+					// Update config with last update time
+					config.LastLeaderboardUpdate.Value = now;
+					config.Write(configPath);
+					
+					// Calculate next update time
+					var nextUpdate = now.AddSeconds(CHECK_INTERVAL_SECONDS);
+					
+					// Send notifications
+					TSPlayer.All.SendSuccessMessage("Leaderboard rankings have been updated!");
+					TSPlayer.All.SendInfoMessage($"Next update in {TimeSpan.FromSeconds(CHECK_INTERVAL_SECONDS).TotalMinutes:0} minutes");
+					
+					// Display current leaderboard
 					LeaderboardCheckUpdate();
+					
+					// Log update
+					TShock.Log.Info($"Leaderboard auto-updated at {now:yyyy-MM-dd HH:mm:ss}");
+					TShock.Log.Info($"Next update scheduled for: {nextUpdate:yyyy-MM-dd HH:mm:ss}");
 				}
 			}
 			catch (Exception ex)
 			{
 				TShock.Log.Error($"Error in OnGameUpdate: {ex.Message}");
+				TShock.Log.Debug($"Stack trace: {ex.StackTrace}");
 			}
 		}
 
@@ -721,7 +726,7 @@ namespace JgransEconomySystem
 			{
 				var leaderboardData = await bank.GetLatestLeaderboardData();
 				var lastUpdate = config.LastLeaderboardUpdate.Value;
-				var nextUpdate = GetNextUpdateTime();
+				var nextUpdate = lastUpdate.AddSeconds(CHECK_INTERVAL_SECONDS);
 				
 				var sb = new StringBuilder();
 				sb.AppendLine($"=== Top {config.CurrencyName.Value} Leaderboard ===");
@@ -731,8 +736,7 @@ namespace JgransEconomySystem
 					sb.AppendLine("No leaderboard data available.");
 					if (lastUpdate == DateTime.MinValue)
 					{
-						sb.AppendLine("First update scheduled for:");
-						sb.AppendLine($"{nextUpdate:yyyy-MM-dd HH:mm:ss}");
+						sb.AppendLine("First update scheduled.");
 					}
 				}
 				else
@@ -742,8 +746,14 @@ namespace JgransEconomySystem
 					
 					// Calculate and show time until next update
 					var timeUntilNext = nextUpdate - DateTime.Now;
-					sb.AppendLine($"Next update: {nextUpdate:yyyy-MM-dd HH:mm:ss}");
-					sb.AppendLine($"Time remaining: {timeUntilNext.Hours:D2}h {timeUntilNext.Minutes:D2}m {timeUntilNext.Seconds:D2}s");
+					if (timeUntilNext.TotalSeconds > 0)
+					{
+						sb.AppendLine($"Next update in: {timeUntilNext.Minutes:D2}m {timeUntilNext.Seconds:D2}s");
+					}
+					else
+					{
+						sb.AppendLine("Update pending...");
+					}
 					sb.AppendLine("----------------------------------------");
 
 					// Display leaderboard entries
@@ -773,19 +783,6 @@ namespace JgransEconomySystem
 				TShock.Log.ConsoleError("An error occurred while retrieving the leaderboard.");
 				TSPlayer.All.SendErrorMessage("An error occurred while updating the leaderboard display.");
 			}
-		}
-
-		public DateTime GetNextUpdateTime()
-		{
-			var now = DateTime.Now;
-			var next = new DateTime(now.Year, now.Month, now.Day, 
-				config.LeaderboardUpdateHour.Value, 
-				config.LeaderboardUpdateMinute.Value, 0);
-			
-			if (next <= now)
-				next = next.AddDays(1);
-			
-			return next;
 		}
 
 		private string GetLeaderboardRankDisplay(int position)
@@ -985,51 +982,6 @@ namespace JgransEconomySystem
 			if (daysUntilSaturday == 0 && now.Hour >= 0)
 				daysUntilSaturday = 7;
 			return now.Date.AddDays(daysUntilSaturday);
-		}
-
-		private async void UpdateLeaderboardCommand(CommandArgs args)
-		{
-			var player = args.Player;
-			int countdown = 10;
-
-			try
-			{
-				// Announce start of update
-				TSPlayer.All.SendInfoMessage($"Leaderboard rankings will update in {countdown} seconds!");
-
-				// Start countdown
-				for (int i = countdown; i > 0; i--)
-				{
-					if (i <= 5)
-					{
-						TSPlayer.All.SendInfoMessage($"Updating in {i}...");
-					}
-					await Task.Delay(1000);
-				}
-
-				TSPlayer.All.SendInfoMessage("Updating leaderboard rankings now...");
-				
-				// Perform the update
-				await Rank.UpdateLeaderboardRanks();
-				
-				// Update the last update time in config
-				config.LastLeaderboardUpdate.Value = DateTime.Now;
-				config.Write(configPath);
-				
-				var nextUpdate = GetNextUpdateTime();
-				TSPlayer.All.SendSuccessMessage("Leaderboard rankings have been updated!");
-				TSPlayer.All.SendInfoMessage($"Next scheduled update: {nextUpdate:yyyy-MM-dd HH:mm:ss}");
-
-				// Log the manual update
-				TShock.Log.Info($"Leaderboard rankings manually updated by {player.Name} at {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
-				TShock.Log.Info($"Next automatic update scheduled for: {nextUpdate:yyyy-MM-dd HH:mm:ss}");
-			}
-			catch (Exception ex)
-			{
-				TShock.Log.Error($"Error in manual leaderboard update: {ex.Message}");
-				TShock.Log.Error($"Stack trace: {ex.StackTrace}");
-				player.SendErrorMessage("An error occurred while updating the leaderboard rankings.");
-			}
 		}
 	}
 }
