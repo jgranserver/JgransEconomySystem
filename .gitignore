@@ -1,8 +1,28 @@
 # Build and Release Folders
 bin-debug/
 bin-release/
-[Oo]bj/
+obj/
+bin/
+
+# Visual Studio files
+.vs/
+*.user
+*.suo
+*.cache
+*.pdb
+
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Bb]uild/
 [Bb]in/
+[Oo]bj/
+
+# NuGet Packages
+*.nupkg
+packages/
 
 # Other files and folders
 .settings/
