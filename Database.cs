@@ -1,8 +1,8 @@
+using System.Collections.Concurrent;
 using System.IO.Compression;
 using System.Text;
 using Microsoft.Data.Sqlite;
 using TShockAPI;
-using System.Collections.Concurrent;
 
 namespace JgransEconomySystem
 {
@@ -30,7 +30,7 @@ namespace JgransEconomySystem
                     "CREATE TABLE IF NOT EXISTS SwitchShop (Id INTEGER PRIMARY KEY, X INTEGER, Y INTEGER, Item INTEGER, Stack INTEGER, Price INTEGER, AllowedGroup TEXT, WorldID INTEGER)",
                     "CREATE TABLE IF NOT EXISTS Ranks (RankId INTEGER PRIMARY KEY, RankName TEXT, RequiredCurrencyAmount INTEGER, GroupName TEXT, NextRank TEXT)",
                     "CREATE TABLE IF NOT EXISTS CommandShop (ID INTEGER PRIMARY KEY AUTOINCREMENT, X INTEGER, Y INTEGER, Command TEXT NOT NULL, Price INTEGER NOT NULL, AllowedGroup TEXT, WorldID INTEGER)",
-                    "CREATE TABLE IF NOT EXISTS BuyerChests (ID INTEGER PRIMARY KEY, X INTEGER, Y INTEGER)"
+                    "CREATE TABLE IF NOT EXISTS BuyerChests (ID INTEGER PRIMARY KEY, X INTEGER, Y INTEGER)",
                 };
 
                 foreach (var cmdText in commands)
@@ -42,7 +42,8 @@ namespace JgransEconomySystem
             }
 
             // Add leaderboard history table
-            await ExecuteNonQueryAsync(@"
+            await ExecuteNonQueryAsync(
+                @"
                 CREATE TABLE IF NOT EXISTS LeaderboardHistory (
                     PlayerId INTEGER,
                     PlayerName TEXT,
@@ -50,10 +51,14 @@ namespace JgransEconomySystem
                     Position INTEGER,
                     UpdatedAt TEXT,
                     PRIMARY KEY (PlayerId, UpdatedAt)
-                )");
+                )"
+            );
         }
 
-        private async Task ExecuteNonQueryAsync(string commandText, params (string, object)[] parameters)
+        private async Task ExecuteNonQueryAsync(
+            string commandText,
+            params (string, object)[] parameters
+        )
         {
             using (var connection = new SqliteConnection(connectionString))
             {
@@ -71,10 +76,15 @@ namespace JgransEconomySystem
 
         public async Task SaveCurrencyAmount(int playerId, int currencyAmount)
         {
-            var commandText = @"INSERT INTO EconomyData (PlayerId, CurrencyAmount)
+            var commandText =
+                @"INSERT INTO EconomyData (PlayerId, CurrencyAmount)
                                 VALUES (@PlayerId, @CurrencyAmount)
                                 ON CONFLICT(PlayerId) DO UPDATE SET CurrencyAmount = @CurrencyAmount";
-            await ExecuteNonQueryAsync(commandText, ("@PlayerId", playerId), ("@CurrencyAmount", currencyAmount));
+            await ExecuteNonQueryAsync(
+                commandText,
+                ("@PlayerId", playerId),
+                ("@CurrencyAmount", currencyAmount)
+            );
         }
 
         public async Task UpdateCurrencyAmount(int playerId, int currencyAmount)
@@ -89,7 +99,12 @@ namespace JgransEconomySystem
                 using (var connection = new SqliteConnection(connectionString))
                 {
                     await connection.OpenAsync();
-                    using (var command = new SqliteCommand("SELECT CurrencyAmount FROM EconomyData WHERE PlayerId = @PlayerId", connection))
+                    using (
+                        var command = new SqliteCommand(
+                            "SELECT CurrencyAmount FROM EconomyData WHERE PlayerId = @PlayerId",
+                            connection
+                        )
+                    )
                     {
                         command.Parameters.AddWithValue("@PlayerId", playerId);
                         using (var reader = await command.ExecuteReaderAsync())
@@ -105,15 +120,22 @@ namespace JgransEconomySystem
             }
             catch (Exception ex)
             {
-                TShock.Log.Error($"Error getting currency amount for player {playerId}: {ex.Message}");
+                TShock.Log.Error(
+                    $"Error getting currency amount for player {playerId}: {ex.Message}"
+                );
                 return 0;
             }
         }
 
         public async Task AddPlayerAccount(int playerId, int initialCurrencyAmount)
         {
-            var commandText = "INSERT INTO EconomyData (PlayerId, CurrencyAmount) VALUES (@PlayerId, @CurrencyAmount)";
-            await ExecuteNonQueryAsync(commandText, ("@PlayerId", playerId), ("@CurrencyAmount", initialCurrencyAmount));
+            var commandText =
+                "INSERT INTO EconomyData (PlayerId, CurrencyAmount) VALUES (@PlayerId, @CurrencyAmount)";
+            await ExecuteNonQueryAsync(
+                commandText,
+                ("@PlayerId", playerId),
+                ("@CurrencyAmount", initialCurrencyAmount)
+            );
         }
 
         public async Task DeletePlayerAccount(int playerId)
@@ -129,13 +151,20 @@ namespace JgransEconomySystem
                 using (var connection = new SqliteConnection(connectionString))
                 {
                     await connection.OpenAsync();
-                    using (var command = new SqliteCommand("SELECT 1 FROM EconomyData WHERE PlayerId = @PlayerId", connection))
+                    using (
+                        var command = new SqliteCommand(
+                            "SELECT 1 FROM EconomyData WHERE PlayerId = @PlayerId",
+                            connection
+                        )
+                    )
                     {
                         command.Parameters.AddWithValue("@PlayerId", playerId);
                         using (var reader = await command.ExecuteReaderAsync())
                         {
                             bool exists = await reader.ReadAsync();
-                            TShock.Log.Debug($"PlayerAccountExists check for ID {playerId}: {exists}");
+                            TShock.Log.Debug(
+                                $"PlayerAccountExists check for ID {playerId}: {exists}"
+                            );
                             return exists;
                         }
                     }
@@ -164,7 +193,8 @@ namespace JgransEconomySystem
         public async Task<List<Rank>> GetRanks()
         {
             var ranks = new List<Rank>();
-            var commandText = "SELECT RankName, RequiredCurrencyAmount, GroupName, NextRank FROM Ranks";
+            var commandText =
+                "SELECT RankName, RequiredCurrencyAmount, GroupName, NextRank FROM Ranks";
 
             using (var connection = new SqliteConnection(connectionString))
             {
@@ -178,9 +208,11 @@ namespace JgransEconomySystem
                             var rank = new Rank
                             {
                                 Name = reader.GetString(0),
-                                RequiredCurrencyAmount = reader.IsDBNull(1) ? 0 : reader.GetInt32(1),
+                                RequiredCurrencyAmount = reader.IsDBNull(1)
+                                    ? 0
+                                    : reader.GetInt32(1),
                                 GroupName = reader.GetString(2),
-                                NextRank = reader.IsDBNull(3) ? null : reader.GetString(3)
+                                NextRank = reader.IsDBNull(3) ? null : reader.GetString(3),
                             };
                             ranks.Add(rank);
                         }
@@ -192,9 +224,15 @@ namespace JgransEconomySystem
 
         public async Task AddRank(string rankName, int requiredCurrencyAmount, string groupName)
         {
-            var commandText = @"INSERT INTO Ranks (RankName, RequiredCurrencyAmount, GroupName)
+            var commandText =
+                @"INSERT INTO Ranks (RankName, RequiredCurrencyAmount, GroupName)
                                 VALUES (@RankName, @RequiredCurrencyAmount, @GroupName)";
-            await ExecuteNonQueryAsync(commandText, ("@RankName", rankName), ("@RequiredCurrencyAmount", requiredCurrencyAmount), ("@GroupName", groupName));
+            await ExecuteNonQueryAsync(
+                commandText,
+                ("@RankName", rankName),
+                ("@RequiredCurrencyAmount", requiredCurrencyAmount),
+                ("@GroupName", groupName)
+            );
         }
 
         public async Task DeleteRank(string rankName)
@@ -205,7 +243,8 @@ namespace JgransEconomySystem
 
         public async Task<Rank> GetRankByName(string rankName)
         {
-            var commandText = "SELECT RankName, RequiredCurrencyAmount, GroupName, NextRank FROM Ranks WHERE RankName = @RankName";
+            var commandText =
+                "SELECT RankName, RequiredCurrencyAmount, GroupName, NextRank FROM Ranks WHERE RankName = @RankName";
             using (var connection = new SqliteConnection(connectionString))
             {
                 await connection.OpenAsync();
@@ -219,9 +258,11 @@ namespace JgransEconomySystem
                             return new Rank
                             {
                                 Name = reader.GetString(0),
-                                RequiredCurrencyAmount = reader.IsDBNull(1) ? 0 : reader.GetInt32(1),
+                                RequiredCurrencyAmount = reader.IsDBNull(1)
+                                    ? 0
+                                    : reader.GetInt32(1),
                                 GroupName = reader.GetString(2),
-                                NextRank = reader.IsDBNull(3) ? null : reader.GetString(3)
+                                NextRank = reader.IsDBNull(3) ? null : reader.GetString(3),
                             };
                         }
                     }
@@ -254,42 +295,56 @@ namespace JgransEconomySystem
 
         public async Task UpdateRankNextRank(string rankName, string nextRank)
         {
-            var commandText = @"UPDATE Ranks 
+            var commandText =
+                @"UPDATE Ranks 
                                 SET NextRank = @NextRank
                                 WHERE RankName = @RankName";
-            await ExecuteNonQueryAsync(commandText, ("@NextRank", nextRank), ("@RankName", rankName));
+            await ExecuteNonQueryAsync(
+                commandText,
+                ("@NextRank", nextRank),
+                ("@RankName", rankName)
+            );
         }
 
         public async Task UpdateRankRequireCurrency(string rankName, int requiredCurrency)
         {
-            var commandText = @"UPDATE Ranks 
+            var commandText =
+                @"UPDATE Ranks 
                                 SET RequiredCurrencyAmount = @RequiredCurrencyAmount
                                 WHERE RankName = @RankName";
-            await ExecuteNonQueryAsync(commandText, ("@RequiredCurrencyAmount", requiredCurrency), ("@RankName", rankName));
+            await ExecuteNonQueryAsync(
+                commandText,
+                ("@RequiredCurrencyAmount", requiredCurrency),
+                ("@RankName", rankName)
+            );
         }
 
         public async Task SaveLeaderboardData(List<LeaderboardEntry> entries)
         {
-            var commandText = @"
+            var commandText =
+                @"
                 INSERT OR REPLACE INTO LeaderboardHistory 
                 (PlayerId, PlayerName, CurrencyAmount, Position, UpdatedAt)
                 VALUES (@PlayerId, @PlayerName, @CurrencyAmount, @Position, @UpdatedAt)";
 
             foreach (var entry in entries)
             {
-                await ExecuteNonQueryAsync(commandText,
+                await ExecuteNonQueryAsync(
+                    commandText,
                     ("@PlayerId", entry.PlayerId),
                     ("@PlayerName", entry.PlayerName),
                     ("@CurrencyAmount", entry.CurrencyAmount),
                     ("@Position", entry.Position),
-                    ("@UpdatedAt", entry.UpdatedAt.ToString("yyyy-MM-dd HH:mm:ss")));
+                    ("@UpdatedAt", entry.UpdatedAt.ToString("yyyy-MM-dd HH:mm:ss"))
+                );
             }
         }
 
         public async Task<List<LeaderboardEntry>> GetLatestLeaderboardData()
         {
             var entries = new List<LeaderboardEntry>();
-            var commandText = @"
+            var commandText =
+                @"
                 SELECT PlayerId, PlayerName, CurrencyAmount, Position, UpdatedAt
                 FROM LeaderboardHistory
                 WHERE UpdatedAt = (SELECT MAX(UpdatedAt) FROM LeaderboardHistory)
@@ -303,14 +358,16 @@ namespace JgransEconomySystem
                 {
                     while (await reader.ReadAsync())
                     {
-                        entries.Add(new LeaderboardEntry
-                        {
-                            PlayerId = reader.GetInt32(0),
-                            PlayerName = reader.GetString(1),
-                            CurrencyAmount = reader.GetInt32(2),
-                            Position = reader.GetInt32(3),
-                            UpdatedAt = DateTime.Parse(reader.GetString(4))
-                        });
+                        entries.Add(
+                            new LeaderboardEntry
+                            {
+                                PlayerId = reader.GetInt32(0),
+                                PlayerName = reader.GetString(1),
+                                CurrencyAmount = reader.GetInt32(2),
+                                Position = reader.GetInt32(3),
+                                UpdatedAt = DateTime.Parse(reader.GetString(4)),
+                            }
+                        );
                     }
                 }
             }
@@ -320,7 +377,8 @@ namespace JgransEconomySystem
         public async Task<List<(int PlayerId, int CurrencyAmount)>> GetAllPlayersDataAsync()
         {
             var players = new List<(int PlayerId, int CurrencyAmount)>();
-            var commandText = "SELECT PlayerId, CurrencyAmount FROM EconomyData ORDER BY CurrencyAmount DESC";
+            var commandText =
+                "SELECT PlayerId, CurrencyAmount FROM EconomyData ORDER BY CurrencyAmount DESC";
 
             try
             {
