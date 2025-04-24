@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.Xna.Framework;
 using Newtonsoft.Json;
 using Terraria;
@@ -6,6 +7,7 @@ using Terraria.GameContent.Drawing;
 using Terraria.ID;
 using TerrariaApi.Server;
 using TShockAPI;
+using TShockAPI.DB;
 
 namespace JgransEconomySystem
 {
@@ -21,6 +23,15 @@ namespace JgransEconomySystem
         private Timer weekendBonusTimer;
         private bool isWeekendBonus = false;
         private Timer leaderboardTimer;
+        private Dictionary<int, PaymentConfirmation> pendingPayments =
+            new Dictionary<int, PaymentConfirmation>();
+
+        private class PaymentConfirmation
+        {
+            public List<UserAccount> MatchingAccounts { get; set; }
+            public int Amount { get; set; }
+            public DateTime CreatedAt { get; set; }
+        }
 
         public JgransEconomySystem(Main game)
             : base(game) { }
@@ -175,7 +186,7 @@ namespace JgransEconomySystem
                     // If roll is successful, calculate currency amount
                     if (roll <= dropChance)
                     {
-                        currencyAmount = CalculateCurrencyAmount(npc, isHardmode);
+                        currencyAmount = CalculateCurrencyAmount(npc);
                         reason = GetDropReason(npc);
 
                         // Announce boss kills
@@ -281,19 +292,19 @@ namespace JgransEconomySystem
                 var n when NPCType.IsBoss3(n.netID) => 100.0, // 100% for tier 3 bosses
                 var n when NPCType.IsBoss2(n.netID) => 100.0, // 100% for tier 2 bosses
                 var n when NPCType.IsBoss1(n.netID) => 100.0, // 100% for tier 1 bosses
-                var n when NPCType.IsSpecial(n.netID) => 75.0, // 75% for special NPCs
-                var n when NPCType.IsHostile(n.netID) => 50.0, // 50% for hostile NPCs
-                _ => 25.0, // 25% for normal NPCs
+                var n when NPCType.IsSpecial(n.netID) => 50.0, // 50% for special NPCs
+                var n when NPCType.IsHostile(n.netID) => 25.0, // 25% for hostile NPCs
+                _ => 15.0, // 15% for normal NPCs
             };
 
             // Increase chance in hardmode
             if (isHardmode)
-                baseChance *= 1.2;
+                baseChance *= 0.8;
 
             return Math.Min(baseChance, 100.0); // Cap at 100%
         }
 
-        private int CalculateCurrencyAmount(NPC npc, bool isHardmode)
+        private int CalculateCurrencyAmount(NPC npc)
         {
             int baseAmount = npc switch
             {
@@ -509,65 +520,144 @@ namespace JgransEconomySystem
 
         private async Task HandlePayCommand(TSPlayer player, List<string> cmd)
         {
-            if (cmd.Count < 3 || !int.TryParse(cmd[2], out int payment) || payment <= 0)
-            {
-                player.SendErrorMessage("Usage: /bank pay <playername> <amount>");
-                return;
-            }
-
-            var receiverAccount = TShock.UserAccounts.GetUserAccountByName(cmd[1]);
-            if (receiverAccount == null)
-            {
-                player.SendErrorMessage("Player does not exist.");
-                return;
-            }
-
-            if (TShock.Players.FirstOrDefault(p => p?.Account?.ID == receiverAccount.ID) == null)
-            {
-                player.SendErrorMessage("Player is not online.");
-                return;
-            }
-
-            // Check sender's balance
-            int senderBalance = await bank.GetCurrencyAmount(player.Account.ID);
-            if (senderBalance < payment)
-            {
-                player.SendErrorMessage("Insufficient funds for this payment.");
-                return;
-            }
-
             try
             {
-                // Get receiver's balance and update both accounts
-                int receiverBalance = await bank.GetCurrencyAmount(receiverAccount.ID);
-                await bank.UpdateCurrencyAmount(player.Account.ID, senderBalance - payment);
-                await bank.UpdateCurrencyAmount(receiverAccount.ID, receiverBalance + payment);
-                await Transaction.RecordTransaction(
-                    receiverAccount.Name,
-                    Transaction.ReceivedFromPayment + player.Account.Name,
-                    payment
-                );
-
-                // Send success message to sender
-                player.SendSuccessMessage(
-                    $"Paid {payment:N0} {config.CurrencyName.Value}/s to {receiverAccount.Name}."
-                );
-
-                // If receiver is online, notify them
-                var receiverPlayer = TShock.Players.FirstOrDefault(p =>
-                    p?.Account?.ID == receiverAccount.ID
-                );
-                if (receiverPlayer != null)
+                // Check basic command format
+                if (cmd.Count < 3 || !int.TryParse(cmd[2], out int payment) || payment <= 0)
                 {
-                    receiverPlayer.SendSuccessMessage(
-                        $"Received {payment:N0} {config.CurrencyName.Value}/s from {player.Name}."
-                    );
+                    player.SendErrorMessage("Usage: /bank pay <playername> <amount>");
+                    return;
                 }
+
+                // If player has pending confirmation, handle selection
+                if (pendingPayments.TryGetValue(player.Index, out var pending))
+                {
+                    if ((DateTime.Now - pending.CreatedAt).TotalMinutes > 1)
+                    {
+                        pendingPayments.Remove(player.Index);
+                        player.SendErrorMessage("Payment selection expired. Please try again.");
+                        return;
+                    }
+
+                    if (
+                        int.TryParse(cmd[1], out int selection)
+                        && selection > 0
+                        && selection <= pending.MatchingAccounts.Count
+                    )
+                    {
+                        var selectedAccount = pending.MatchingAccounts[selection - 1];
+                        await ProcessPayment(player, selectedAccount, pending.Amount);
+                        pendingPayments.Remove(player.Index);
+                        return;
+                    }
+                    else
+                    {
+                        player.SendErrorMessage("Invalid selection. Payment cancelled.");
+                        pendingPayments.Remove(player.Index);
+                        return;
+                    }
+                }
+
+                // Get target name pattern
+                string namePattern = cmd[1];
+
+                // Find matching accounts using regex
+                var matchingAccounts = TShock
+                    .UserAccounts.GetUserAccounts()
+                    .Where(acc => Regex.IsMatch(acc.Name, namePattern, RegexOptions.IgnoreCase))
+                    .ToList();
+
+                // Handle no matches
+                if (matchingAccounts.Count == 0)
+                {
+                    player.SendErrorMessage($"No players found matching pattern: {namePattern}");
+                    return;
+                }
+
+                // Handle single match
+                if (matchingAccounts.Count == 1)
+                {
+                    await ProcessPayment(player, matchingAccounts[0], payment);
+                    return;
+                }
+
+                // Handle multiple matches
+                var sb = new StringBuilder();
+                sb.AppendLine("Multiple matches found. Please select a player by number:");
+                for (int i = 0; i < matchingAccounts.Count; i++)
+                {
+                    sb.AppendLine($"{i + 1}. {matchingAccounts[i].Name}");
+                }
+                sb.AppendLine("Type '/bank pay <number> <amount>' to confirm payment.");
+
+                player.SendInfoMessage(sb.ToString());
+                pendingPayments[player.Index] = new PaymentConfirmation
+                {
+                    MatchingAccounts = matchingAccounts,
+                    Amount = payment,
+                    CreatedAt = DateTime.Now,
+                };
             }
             catch (Exception ex)
             {
                 TShock.Log.Error($"Error in HandlePayCommand: {ex.Message}");
                 player.SendErrorMessage("An error occurred while processing the payment.");
+            }
+        }
+
+        private async Task ProcessPayment(TSPlayer sender, UserAccount receiver, int amount)
+        {
+            try
+            {
+                // Check if receiver is online
+                var receiverPlayer = TShock.Players.FirstOrDefault(p =>
+                    p?.Account?.ID == receiver.ID
+                );
+                if (receiverPlayer == null)
+                {
+                    sender.SendErrorMessage($"Player {receiver.Name} is not online.");
+                    return;
+                }
+
+                // Check sender's balance
+                int senderBalance = await bank.GetCurrencyAmount(sender.Account.ID);
+                if (senderBalance < amount)
+                {
+                    sender.SendErrorMessage(
+                        $"Insufficient funds. Your balance: {senderBalance:N0} {config.CurrencyName.Value}"
+                    );
+                    return;
+                }
+
+                // Process the payment
+                int receiverBalance = await bank.GetCurrencyAmount(receiver.ID);
+                await bank.UpdateCurrencyAmount(sender.Account.ID, senderBalance - amount);
+                await bank.UpdateCurrencyAmount(receiver.ID, receiverBalance + amount);
+
+                // Record transaction
+                await Transaction.RecordTransaction(
+                    receiver.Name,
+                    Transaction.ReceivedFromPayment + sender.Name,
+                    amount
+                );
+
+                // Notify both parties
+                sender.SendSuccessMessage(
+                    $"Paid {amount:N0} {config.CurrencyName.Value} to {receiver.Name}"
+                );
+                receiverPlayer.SendSuccessMessage(
+                    $"Received {amount:N0} {config.CurrencyName.Value} from {sender.Name}"
+                );
+
+                // Log the transaction
+                TShock.Log.Info(
+                    $"Payment: {sender.Name} -> {receiver.Name}: {amount:N0} {config.CurrencyName.Value}"
+                );
+            }
+            catch (Exception ex)
+            {
+                TShock.Log.Error($"Error in ProcessPayment: {ex.Message}");
+                sender.SendErrorMessage("An error occurred while processing the payment.");
             }
         }
 
