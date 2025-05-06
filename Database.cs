@@ -31,6 +31,21 @@ namespace JgransEconomySystem
                     "CREATE TABLE IF NOT EXISTS Ranks (RankId INTEGER PRIMARY KEY, RankName TEXT, RequiredCurrencyAmount INTEGER, GroupName TEXT, NextRank TEXT)",
                     "CREATE TABLE IF NOT EXISTS CommandShop (ID INTEGER PRIMARY KEY AUTOINCREMENT, X INTEGER, Y INTEGER, Command TEXT NOT NULL, Price INTEGER NOT NULL, AllowedGroup TEXT, WorldID INTEGER)",
                     "CREATE TABLE IF NOT EXISTS BuyerChests (ID INTEGER PRIMARY KEY, X INTEGER, Y INTEGER)",
+                    @"CREATE TABLE IF NOT EXISTS LeaderboardHistory (
+                        PlayerId INTEGER,
+                        PlayerName TEXT,
+                        CurrencyAmount INTEGER,
+                        Position INTEGER,
+                        UpdatedAt TEXT,
+                        PRIMARY KEY (PlayerId, UpdatedAt)
+                    )",
+                    @"CREATE TABLE IF NOT EXISTS PlayerPreviousRanks (
+                        PlayerId INTEGER,
+                        WorldId TEXT,
+                        Position INTEGER,
+                        LastUpdated DATETIME,
+                        PRIMARY KEY (PlayerId, WorldId)
+                    )",
                 };
 
                 foreach (var cmdText in commands)
@@ -40,19 +55,6 @@ namespace JgransEconomySystem
                     await command.ExecuteNonQueryAsync();
                 }
             }
-
-            // Add leaderboard history table
-            await ExecuteNonQueryAsync(
-                @"
-                CREATE TABLE IF NOT EXISTS LeaderboardHistory (
-                    PlayerId INTEGER,
-                    PlayerName TEXT,
-                    CurrencyAmount INTEGER,
-                    Position INTEGER,
-                    UpdatedAt TEXT,
-                    PRIMARY KEY (PlayerId, UpdatedAt)
-                )"
-            );
         }
 
         private async Task ExecuteNonQueryAsync(
@@ -406,6 +408,42 @@ namespace JgransEconomySystem
                 TShock.Log.Debug($"Stack trace: {ex.StackTrace}");
                 return new List<(int PlayerId, int CurrencyAmount)>();
             }
+        }
+
+        public async Task SavePreviousRank(int playerId, string worldId, int position)
+        {
+            var commandText =
+                @"
+                INSERT OR REPLACE INTO PlayerPreviousRanks 
+                (PlayerId, WorldId, Position, LastUpdated)
+                VALUES (@PlayerId, @WorldId, @Position, @LastUpdated)";
+
+            await ExecuteNonQueryAsync(
+                commandText,
+                ("@PlayerId", playerId),
+                ("@WorldId", worldId),
+                ("@Position", position),
+                ("@LastUpdated", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"))
+            );
+        }
+
+        public async Task<int> GetPreviousRank(int playerId, string worldId)
+        {
+            using var connection = new SqliteConnection(connectionString);
+            await connection.OpenAsync();
+            using var command = connection.CreateCommand();
+
+            command.CommandText =
+                @"
+                SELECT Position 
+                FROM PlayerPreviousRanks 
+                WHERE PlayerId = @PlayerId AND WorldId = @WorldId";
+
+            command.Parameters.AddWithValue("@PlayerId", playerId);
+            command.Parameters.AddWithValue("@WorldId", worldId);
+
+            var result = await command.ExecuteScalarAsync();
+            return result != null ? Convert.ToInt32(result) : 0;
         }
     }
 }
