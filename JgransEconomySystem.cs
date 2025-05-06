@@ -135,9 +135,7 @@ namespace JgransEconomySystem
         private async Task Economy(SendDataEventArgs args)
         {
             if (!config.ToggleEconomy.Value)
-            {
                 return;
-            }
 
             var data = args.MsgId;
             var npcIndex = args.number;
@@ -156,144 +154,123 @@ namespace JgransEconomySystem
             var npc = Main.npc[npcIndex];
 
             if (npc.SpawnedFromStatue)
-            {
                 return;
-            }
 
             bool isHardmode = Main.hardMode;
 
-            switch (data)
+            if (data != PacketTypes.NpcStrike || npc == null || npc.life > 0)
+                return;
+
+            // Anti-farming check
+            if (lastNpcStrikeTime.ContainsKey(player.Index))
             {
-                case PacketTypes.NpcStrike:
-                    if (npc == null || npc.life > 0)
-                        return;
-
-                    // Anti-farming check remains the same
-                    if (lastNpcStrikeTime.ContainsKey(player.Index))
-                    {
-                        var lastStrike = lastNpcStrikeTime[player.Index];
-                        if ((DateTime.Now - lastStrike).TotalMilliseconds < 500)
-                            return;
-                    }
-                    lastNpcStrikeTime[player.Index] = DateTime.Now;
-
-                    // New drop chance calculation
-                    double dropChance = CalculateDropChance(npc, isHardmode);
-                    double roll = Main.rand.NextDouble() * 100; // Roll between 0-100%
-                    int currencyAmount = 0;
-                    string reason = "";
-
-                    // If roll is successful, calculate currency amount
-                    if (roll <= dropChance)
-                    {
-                        currencyAmount = CalculateCurrencyAmount(npc);
-                        reason = GetDropReason(npc);
-
-                        // Announce boss kills
-                        if (IsBossNPC(npc) && spawned)
-                        {
-                            TSPlayer.All.SendMessage(
-                                $"{player.Name} received {currencyAmount:N0} {config.CurrencyName.Value} from killing {npc.TypeName}!",
-                                Color.LightCyan
-                            );
-                            spawned = false;
-                        }
-                    }
-
-                    if (currencyAmount > 0)
-                    {
-                        try
-                        {
-                            // Apply hardmode multiplier first
-                            if (isHardmode)
-                                currencyAmount = (int)(currencyAmount * 1.2);
-
-                            // Apply rank multiplier
-                            double rankMultiplier = GetRankMultiplier(player.Group.Name);
-                            int originalAmount = currencyAmount;
-                            currencyAmount = (int)(currencyAmount * rankMultiplier);
-
-                            // Show multiplier info if it was applied
-                            if (rankMultiplier > 1)
-                            {
-                                Vector2 multiplierPosition =
-                                    player.TPlayer.Center + new Vector2(0, -120);
-                                player.SendData(
-                                    PacketTypes.CreateCombatTextExtended,
-                                    $"x{rankMultiplier:F1} Rank Bonus!",
-                                    (int)Color.Gold.PackedValue,
-                                    multiplierPosition.X,
-                                    multiplierPosition.Y
-                                );
-                            }
-
-                            // Apply weekend bonus if active and player has a regular rank
-                            bool isRegularRank = rankMultiplier == 1.0; // Regular ranks have no multiplier
-                            if (isWeekendBonus && config.WeekendBonusEnabled.Value && isRegularRank)
-                            {
-                                int preWeekendBonus = currencyAmount;
-                                currencyAmount = (int)(
-                                    currencyAmount * config.WeekendBonusMultiplier.Value
-                                );
-
-                                // Show weekend bonus notification
-                                Vector2 bonusPosition =
-                                    player.TPlayer.Center + new Vector2(0, -140);
-                                player.SendData(
-                                    PacketTypes.CreateCombatTextExtended,
-                                    $"x{config.WeekendBonusMultiplier.Value:F1} Weekend Bonus!",
-                                    (int)Color.LightGreen.PackedValue,
-                                    bonusPosition.X,
-                                    bonusPosition.Y
-                                );
-                            }
-
-                            // Get current balance and update
-                            int balance = await bank.GetCurrencyAmount(player.Account.ID);
-                            int newBalance = balance + currencyAmount;
-                            await bank.UpdateCurrencyAmount(player.Account.ID, newBalance);
-                            await Transaction.RecordTransaction(
-                                player.Name,
-                                reason,
-                                currencyAmount
-                            );
-
-                            // Calculate the position above the player
-                            Vector2 displayPosition = player.TPlayer.Center + new Vector2(0, -100);
-
-                            // Send combat text with multiplier info if applicable
-                            player.SendData(
-                                PacketTypes.CreateCombatTextExtended,
-                                $"{currencyAmount:N0} {config.CurrencyName.Value}",
-                                (int)Color.LightBlue.PackedValue,
-                                displayPosition.X,
-                                displayPosition.Y + 1
-                            );
-
-                            // Spawn Lucky Coin particle effect
-                            ParticleOrchestraSettings settings = new ParticleOrchestraSettings
-                            {
-                                IndexOfPlayerWhoInvokedThis = (byte)player.Index,
-                                PositionInWorld = displayPosition,
-                                MovementVector = Vector2.Zero,
-                                UniqueInfoPiece = ItemID.LuckyCoin,
-                            };
-
-                            // Broadcast the particle effect
-                            ParticleOrchestrator.BroadcastParticleSpawn(
-                                ParticleOrchestraType.ItemTransfer,
-                                settings
-                            );
-                        }
-                        catch (Exception ex)
-                        {
-                            TShock.Log.Error($"Error updating currency in Economy: {ex.Message}");
-                        }
-                    }
-                    break;
-
-                default:
+                var lastStrike = lastNpcStrikeTime[player.Index];
+                if ((DateTime.Now - lastStrike).TotalMilliseconds < 500)
                     return;
+            }
+            lastNpcStrikeTime[player.Index] = DateTime.Now;
+
+            // Calculate drop chance and currency
+            double dropChance = CalculateDropChance(npc, isHardmode);
+            double roll = Main.rand.NextDouble() * 100;
+            int currencyAmount = 0;
+            string reason = "";
+
+            if (roll <= dropChance)
+            {
+                currencyAmount = CalculateCurrencyAmount(npc);
+                reason = GetDropReason(npc);
+
+                if (IsBossNPC(npc) && spawned)
+                {
+                    TSPlayer.All.SendMessage(
+                        $"{player.Name} received {currencyAmount:N0} {config.CurrencyName.Value} from killing {npc.TypeName}!",
+                        Color.LightCyan
+                    );
+                    spawned = false;
+                }
+            }
+
+            if (currencyAmount > 0)
+            {
+                try
+                {
+                    // Apply hardmode multiplier
+                    if (isHardmode)
+                        currencyAmount = (int)(currencyAmount * 1.2);
+
+                    // Apply rank multiplier
+                    double rankMultiplier = GetRankMultiplier(player.Group.Name);
+                    bool isRegularRank = rankMultiplier == 1.0; // Regular ranks have no multiplier
+                    int originalAmount = currencyAmount;
+                    currencyAmount = (int)(currencyAmount * rankMultiplier);
+
+                    // Show rank multiplier notification if applicable
+                    if (rankMultiplier > 1)
+                    {
+                        Vector2 multiplierPosition = player.TPlayer.Center + new Vector2(0, -120);
+                        player.SendData(
+                            PacketTypes.CreateCombatTextExtended,
+                            $"x{rankMultiplier:F1} Rank Bonus!",
+                            (int)Color.Gold.PackedValue,
+                            multiplierPosition.X,
+                            multiplierPosition.Y
+                        );
+                    }
+
+                    // Apply weekend bonus only for regular ranks
+                    if (isWeekendBonus && config.WeekendBonusEnabled.Value && isRegularRank)
+                    {
+                        int preWeekendBonus = currencyAmount;
+                        currencyAmount = (int)(
+                            currencyAmount * config.WeekendBonusMultiplier.Value
+                        );
+
+                        // Show weekend bonus notification
+                        Vector2 bonusPosition = player.TPlayer.Center + new Vector2(0, -140);
+                        player.SendData(
+                            PacketTypes.CreateCombatTextExtended,
+                            $"x{config.WeekendBonusMultiplier.Value:F1} Weekend Bonus!",
+                            (int)Color.LightGreen.PackedValue,
+                            bonusPosition.X,
+                            bonusPosition.Y
+                        );
+                    }
+
+                    // Update player's balance
+                    int balance = await bank.GetCurrencyAmount(player.Account.ID);
+                    int newBalance = balance + currencyAmount;
+                    await bank.UpdateCurrencyAmount(player.Account.ID, newBalance);
+                    await Transaction.RecordTransaction(player.Name, reason, currencyAmount);
+
+                    // Display currency gain
+                    Vector2 displayPosition = player.TPlayer.Center + new Vector2(0, -100);
+                    player.SendData(
+                        PacketTypes.CreateCombatTextExtended,
+                        $"{currencyAmount:N0} {config.CurrencyName.Value}",
+                        (int)Color.LightBlue.PackedValue,
+                        displayPosition.X,
+                        displayPosition.Y + 1
+                    );
+
+                    // Show particle effect
+                    ParticleOrchestraSettings settings = new ParticleOrchestraSettings
+                    {
+                        IndexOfPlayerWhoInvokedThis = (byte)player.Index,
+                        PositionInWorld = displayPosition,
+                        MovementVector = Vector2.Zero,
+                        UniqueInfoPiece = ItemID.LuckyCoin,
+                    };
+
+                    ParticleOrchestrator.BroadcastParticleSpawn(
+                        ParticleOrchestraType.ItemTransfer,
+                        settings
+                    );
+                }
+                catch (Exception ex)
+                {
+                    TShock.Log.Error($"Error updating currency in Economy: {ex.Message}");
+                }
             }
         }
 
@@ -786,61 +763,238 @@ namespace JgransEconomySystem
             }
         }
 
-        private void OnServerChat(ServerChatEventArgs args)
+        private async void OnServerChat(ServerChatEventArgs args)
         {
-            string message = args.Text;
-            var player = TShock.Players[args.Who];
-            var group = player.Group;
+            if (!args.Text.StartsWith("/") && !args.Text.StartsWith("."))
+                return;
 
-            if (!group.HasPermission("tshock.npc.summonboss"))
+            var player = TShock.Players[args.Who];
+            if (player == null || !player.IsLoggedIn)
+                return;
+
+            string message = args.Text;
+            string[] cmdParts = message.Substring(1).Split(' ');
+            string command = cmdParts[0].ToLower();
+
+            try
             {
+                switch (command)
+                {
+                    case "spawnboss":
+                    case "sb":
+                        await HandleBossSpawnCommand(player, message);
+                        break;
+
+                    case "gbuff":
+                        await HandleBuffCommand(player, cmdParts);
+                        break;
+
+                    case "warp":
+                        await HandleWarpCommand(player, cmdParts, message);
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                TShock.Log.Error($"Error processing {command} command: {ex.Message}");
+                TShock.Log.Debug($"Stack trace: {ex.StackTrace}");
+                player.SendErrorMessage("An error occurred while processing the command.");
+            }
+        }
+
+        private async Task HandleBossSpawnCommand(TSPlayer player, string message)
+        {
+            if (!player.Group.HasPermission("tshock.npc.summonboss"))
+            {
+                player.SendErrorMessage("You don't have permission to spawn bosses.");
                 return;
             }
 
-            // Check if the chat message starts with the command prefix (e.g., "/")
-            if (message.StartsWith("/") || message.StartsWith("."))
+            if (Commands.HandleCommand(TSPlayer.Server, message))
             {
-                // Extract the command name from the chat message
-                string commandName = message.Substring(1).Split(' ')[0];
+                spawned = true;
+                TSPlayer.All.SendInfoMessage(
+                    "Boss Spawned! The one who gets the last hit gets the jspoints!"
+                );
+            }
+        }
 
-                // Check if the command name corresponds to your desired command
-                if (
-                    commandName.Equals("spawnboss", StringComparison.OrdinalIgnoreCase)
-                    || commandName.Equals("sb", StringComparison.OrdinalIgnoreCase)
-                )
+        private async Task HandleBuffCommand(TSPlayer player, string[] cmdParts)
+        {
+            if (cmdParts.Length < 3)
+            {
+                player.SendErrorMessage("Usage: /gbuff <playername> <buffid/buffname> [duration]");
+                player.SendInfoMessage(
+                    "Note: Duration is optional (default: 5000 points). Negative duration costs 10000 points for permanent buff"
+                );
+                return;
+            }
+
+            string targetName = cmdParts[1];
+            string buffInput = cmdParts[2];
+            int duration = 0;
+            int cost = 5000;
+
+            if (cmdParts.Length >= 4 && !int.TryParse(cmdParts[3], out duration))
+            {
+                player.SendErrorMessage("Duration must be a valid number.");
+                return;
+            }
+
+            cost = duration < 0 ? 10000 : (duration == 0 ? 5000 : duration);
+            bool canBypassCost = player.HasPermission("jgraneconomy.bypassbuffcost");
+
+            if (!canBypassCost)
+            {
+                int balance = await bank.GetCurrencyAmount(player.Account.ID);
+                if (balance < cost)
                 {
-                    // The "/spawnboss" command was executed by a player
-
-                    // Execute the command
-                    bool commandExecuted = TShockAPI.Commands.HandleCommand(
-                        TSPlayer.Server,
-                        message
+                    player.SendErrorMessage(
+                        $"Insufficient funds. Cost: {cost:N0} {config.CurrencyName.Value}, Your balance: {balance:N0} {config.CurrencyName.Value}"
                     );
-
-                    // Check if the command was successfully executed
-                    if (commandExecuted)
-                    {
-                        // The command was executed successfully
-
-                        // Perform your desired actions
-                        spawned = true;
-                        TSPlayer.All.SendInfoMessage(
-                            "Boss Spawned! The one who gets the last hit gets the jspoints!"
-                        );
-
-                        // Access the player who executed the command
-                        if (player != null)
-                        {
-                            // You can perform additional actions specific to the player here
-                        }
-                    }
-                    else
-                    {
-                        // The command execution failed
-
-                        // Perform any necessary error handling or notification
-                    }
+                    return;
                 }
+                player.SendInfoMessage($"Buff will cost {cost:N0} {config.CurrencyName.Value}");
+            }
+
+            if (Commands.HandleCommand(player, string.Join(" ", cmdParts)))
+            {
+                if (!canBypassCost)
+                {
+                    int balance = await bank.GetCurrencyAmount(player.Account.ID);
+                    await bank.UpdateCurrencyAmount(player.Account.ID, balance - cost);
+
+                    string durationText = duration switch
+                    {
+                        < 0 => "permanent",
+                        0 => "default",
+                        _ => $"{duration}s",
+                    };
+
+                    await Transaction.RecordTransaction(
+                        player.Name,
+                        $"Buff command ({buffInput} for {durationText}) on {targetName}",
+                        -cost
+                    );
+                    player.SendSuccessMessage(
+                        $"Paid {cost:N0} {config.CurrencyName.Value} for buff command"
+                    );
+                    player.SendInfoMessage(
+                        $"Your new balance: {balance - cost:N0} {config.CurrencyName.Value}"
+                    );
+                }
+                else
+                {
+                    player.SendSuccessMessage(
+                        $"Buff command executed (Cost bypassed: {cost:N0} {config.CurrencyName.Value})"
+                    );
+                }
+            }
+            else
+            {
+                player.SendErrorMessage("Failed to execute buff command.");
+            }
+        }
+
+        private async Task HandleWarpCommand(TSPlayer player, string[] cmdParts, string message)
+        {
+            if (cmdParts.Length < 2)
+            {
+                player.SendErrorMessage("Usage: /warp <warpname> or /warp add <name>");
+                return;
+            }
+
+            string subCommand = cmdParts[1].ToLower();
+            bool canBypassCost = player.HasPermission("jgraneconomy.bypasswarpcost");
+
+            switch (subCommand)
+            {
+                case "list":
+                    Commands.HandleCommand(player, message);
+                    return;
+
+                case "add":
+                    await HandleWarpAddCommand(player, cmdParts, message, canBypassCost);
+                    break;
+
+                default:
+                    await HandleWarpTeleportCommand(player, cmdParts, message, canBypassCost);
+                    break;
+            }
+        }
+
+        private async Task HandleWarpAddCommand(
+            TSPlayer player,
+            string[] cmdParts,
+            string message,
+            bool canBypassCost
+        )
+        {
+            const int WARP_CREATE_COST = 50000;
+
+            if (!canBypassCost)
+            {
+                int balance = await bank.GetCurrencyAmount(player.Account.ID);
+                if (balance < WARP_CREATE_COST)
+                {
+                    player.SendErrorMessage(
+                        $"Insufficient funds. Creating a warp costs {WARP_CREATE_COST:N0} {config.CurrencyName.Value}"
+                    );
+                    return;
+                }
+            }
+
+            if (Commands.HandleCommand(player, message))
+            {
+                if (!canBypassCost)
+                {
+                    int balance = await bank.GetCurrencyAmount(player.Account.ID);
+                    await bank.UpdateCurrencyAmount(player.Account.ID, balance - WARP_CREATE_COST);
+                    await Transaction.RecordTransaction(
+                        player.Name,
+                        $"Created warp: {cmdParts[2]}",
+                        -WARP_CREATE_COST
+                    );
+                    player.SendSuccessMessage(
+                        $"Paid {WARP_CREATE_COST:N0} {config.CurrencyName.Value} to create warp point."
+                    );
+                }
+            }
+        }
+
+        private async Task HandleWarpTeleportCommand(
+            TSPlayer player,
+            string[] cmdParts,
+            string message,
+            bool canBypassCost
+        )
+        {
+            const int WARP_COST = 5000;
+
+            if (!canBypassCost)
+            {
+                int balance = await bank.GetCurrencyAmount(player.Account.ID);
+                if (balance < WARP_COST)
+                {
+                    player.SendErrorMessage(
+                        $"Insufficient funds. Cost: {WARP_COST:N0} {config.CurrencyName.Value}"
+                    );
+                    return;
+                }
+            }
+
+            if (Commands.HandleCommand(player, message) && !canBypassCost)
+            {
+                int balance = await bank.GetCurrencyAmount(player.Account.ID);
+                await bank.UpdateCurrencyAmount(player.Account.ID, balance - WARP_COST);
+                await Transaction.RecordTransaction(
+                    player.Name,
+                    $"Warp to {cmdParts[1]}",
+                    -WARP_COST
+                );
+                player.SendSuccessMessage(
+                    $"Paid {WARP_COST:N0} {config.CurrencyName.Value} for warping."
+                );
             }
         }
 
@@ -1135,13 +1289,13 @@ namespace JgransEconomySystem
                 // Return multiplier based on rank name
                 return rank.Name switch
                 {
-                    var r when r == config.Top1Rank.Value => 10.0, // 10x multiplier
-                    var r when r == config.Top2Rank.Value => 8.0, // 8x multiplier
-                    var r when r == config.Top3Rank.Value => 6.0, // 6x multiplier
-                    var r when r == config.Top4Rank.Value => 4.0, // 4x multiplier
-                    var r when r == config.Top56Rank.Value => 3.0, // 3x multiplier
-                    var r when r == config.Top78Rank.Value => 2.0, // 2x multiplier
-                    var r when r == config.Top910Rank.Value => 1.5, // 1.5x multiplier
+                    var r when r == config.Top1Rank.Value => 10.0,
+                    var r when r == config.Top2Rank.Value => 8.0,
+                    var r when r == config.Top3Rank.Value => 6.0,
+                    var r when r == config.Top4Rank.Value => 5.0,
+                    var r when r == config.Top56Rank.Value => 4.0,
+                    var r when r == config.Top78Rank.Value => 3.0,
+                    var r when r == config.Top910Rank.Value => 2.5,
                     _ => 1.0, // Default multiplier
                 };
             }
