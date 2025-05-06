@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 using Microsoft.Xna.Framework;
 using Terraria;
@@ -61,8 +62,6 @@ namespace JgransEconomySystem
             {
                 Commands.ChatCommands.Add(new Command("jgranserver.player", cmd, name));
             }
-
-            // Start the timer after config is initialized
         }
 
         // Add config initialization
@@ -360,24 +359,60 @@ namespace JgransEconomySystem
             }
         }
 
-        private static void ShowRankNames(CommandArgs args)
+        private static async void ShowRankNames(CommandArgs args)
         {
             var player = args.Player;
-
-            // Retrieve all RankNames
-            var rankNames = bank.GetAllRankNames().Result;
-
-            if (rankNames.Count > 0)
+            try
             {
-                player.SendInfoMessage("Available Ranks:");
-                foreach (var rankName in rankNames)
+                var ranks = await bank.GetRanks();
+
+                if (ranks.Count > 0)
                 {
-                    player.SendInfoMessage(rankName);
+                    // Sort ranks by required currency amount
+                    var sortedRanks = ranks.OrderBy(r => r.RequiredCurrencyAmount).ToList();
+
+                    player.SendInfoMessage("Available Ranks (in ascending order):");
+                    player.SendInfoMessage(
+                        "This will also display the base cost of each rank (no tax added):"
+                    );
+                    player.SendInfoMessage("----------------------------------------");
+
+                    foreach (var rank in sortedRanks)
+                    {
+                        if (config.RankInfos.TryGetValue(rank.Name, out var rankInfo))
+                        {
+                            string rankType = rankInfo.IsLeaderboardRank
+                                ? "[Leaderboard]"
+                                : "[Regular]";
+                            string costInfo = rankInfo.IsLeaderboardRank
+                                ? "Based on currency leaderboard"
+                                : $"{rank.RequiredCurrencyAmount:N0} {config.CurrencyName.Value}";
+
+                            player.SendMessage(
+                                $"{rank.Name} {rankType} - Base Cost: {costInfo}",
+                                Color.LightCyan
+                            );
+                        }
+                        else
+                        {
+                            // Fallback if rank info is not found
+                            player.SendMessage(
+                                $"{rank.Name} - Cost: {rank.RequiredCurrencyAmount:N0} {config.CurrencyName.Value}",
+                                Color.LightCyan
+                            );
+                        }
+                    }
+                    player.SendInfoMessage("----------------------------------------");
+                }
+                else
+                {
+                    player.SendInfoMessage("No ranks available.");
                 }
             }
-            else
+            catch (Exception ex)
             {
-                player.SendInfoMessage("No ranks available.");
+                TShock.Log.Error($"Error in ShowRankNames: {ex.Message}");
+                player.SendErrorMessage("An error occurred while retrieving rank information.");
             }
         }
 
@@ -637,25 +672,6 @@ namespace JgransEconomySystem
                 || rank == config.Top910Rank.Value;
         }
 
-        private static int GetPreviousPosition(string rank)
-        {
-            if (rank == config.Top1Rank.Value)
-                return 1;
-            if (rank == config.Top2Rank.Value)
-                return 2;
-            if (rank == config.Top3Rank.Value)
-                return 3;
-            if (rank == config.Top4Rank.Value)
-                return 4;
-            if (rank == config.Top56Rank.Value)
-                return 6;
-            if (rank == config.Top78Rank.Value)
-                return 8;
-            if (rank == config.Top910Rank.Value)
-                return 10;
-            return 99; // Default for non-leaderboard ranks
-        }
-
         private static bool IsQualifiedForLeaderboard(string currentRank)
         {
             try
@@ -742,13 +758,58 @@ namespace JgransEconomySystem
 
         private static async void DisplayRankInfo(TSPlayer player, string rankName)
         {
-            if (!config.RankInfos.TryGetValue(rankName, out var rankInfo))
+            // Try exact match first
+            if (config == null || !config.RankInfos.TryGetValue(rankName, out var rankInfo))
+            {
+                // If no exact match, try case-insensitive regex match
+                var matchingRank = config.RankInfos.FirstOrDefault(r =>
+                    Regex.IsMatch(r.Key, $"^{Regex.Escape(rankName)}$", RegexOptions.IgnoreCase)
+                );
+
+                if (matchingRank.Key == null)
+                {
+                    // If still no match, try partial match
+                    var partialMatches = config
+                        .RankInfos.Where(r =>
+                            Regex.IsMatch(r.Key, Regex.Escape(rankName), RegexOptions.IgnoreCase)
+                        )
+                        .ToList();
+
+                    if (partialMatches.Count > 1)
+                    {
+                        player.SendInfoMessage("Multiple ranks found. Did you mean:");
+                        foreach (var match in partialMatches)
+                        {
+                            player.SendInfoMessage($"- {match.Key}");
+                        }
+                        return;
+                    }
+                    else if (partialMatches.Count == 1)
+                    {
+                        rankInfo = partialMatches[0].Value;
+                        rankName = partialMatches[0].Key;
+                    }
+                    else
+                    {
+                        player.SendErrorMessage($"No information available for rank: {rankName}");
+                        return;
+                    }
+                }
+                else
+                {
+                    rankInfo = matchingRank.Value;
+                    rankName = matchingRank.Key;
+                }
+            }
+
+            // ... rest of the existing display logic ...
+            var sb = new StringBuilder();
+            sb.AppendLine("----------------------------------------");
+            if (rankInfo == null)
             {
                 player.SendErrorMessage($"No information available for rank: {rankName}");
                 return;
             }
-
-            var sb = new StringBuilder();
             sb.AppendLine("----------------------------------------");
             sb.AppendLine($"Rank: {rankInfo.Name}");
             sb.AppendLine(
