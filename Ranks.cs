@@ -1,7 +1,8 @@
+using System.Text;
 using Microsoft.Data.Sqlite;
 using Microsoft.Xna.Framework;
+using Terraria;
 using TShockAPI;
-using TShockAPI.Configuration;
 using TShockAPI.DB;
 
 namespace JgransEconomySystem
@@ -53,6 +54,7 @@ namespace JgransEconomySystem
             {
                 ("ranks", ShowRankNames),
                 ("rankup", RankUpCommand),
+                ("rankinfo", ShowRankInfo), // Add this line
             };
 
             foreach (var (name, cmd) in playerCommands)
@@ -185,15 +187,29 @@ namespace JgransEconomySystem
                 }
 
                 // Calculate costs including tax
-                var tax = nextRank.RequiredCurrencyAmount * config.TaxRate.Value;
-                var totalCost = nextRank.RequiredCurrencyAmount + tax;
+                int previousPosition = await bank.GetPreviousRank(
+                    player.Account.ID,
+                    Main.worldID.ToString()
+                );
+                double additionalMultiplier = GetAdditionalCostMultiplier(previousPosition);
+                int baseCost = nextRank.RequiredCurrencyAmount;
+                double tax = baseCost * config.TaxRate.Value;
+                double additionalCost = baseCost * additionalMultiplier;
+                double totalCost = baseCost + tax + additionalCost;
 
                 if (currentCurrencyAmount < totalCost)
                 {
-                    var needed = totalCost - currentCurrencyAmount;
                     player.SendInfoMessage($"Current rank: {currentRank.Name}");
+                    player.SendInfoMessage($"Base cost: {baseCost:N0}");
+                    if (additionalCost > 0)
+                        player.SendInfoMessage(
+                            $"Additional cost (Previous Rank #{previousPosition}): {additionalCost:N0}"
+                        );
+                    if (tax > 0)
+                        player.SendInfoMessage($"Tax: {tax:N0}");
+                    player.SendInfoMessage($"Total cost: {totalCost:N0}");
                     player.SendInfoMessage(
-                        $"You need {needed:N0} more {config.CurrencyName.Value} to rank up to {nextRank.Name}"
+                        $"You need {totalCost - currentCurrencyAmount:N0} more {config.CurrencyName.Value}"
                     );
                     return;
                 }
@@ -682,5 +698,128 @@ namespace JgransEconomySystem
                 return false;
             }
         }
+
+        private static double GetAdditionalCostMultiplier(int previousPosition)
+        {
+            return previousPosition switch
+            {
+                1 => 1.0,
+                2 => 0.9,
+                3 => 0.8,
+                4 => 0.7,
+                5 => 0.6,
+                6 => 0.5,
+                7 => 0.4,
+                8 => 0.3,
+                9 => 0.2,
+                10 => 0.1,
+                _ => 0.0,
+            };
+        }
+
+        private static void ShowRankInfo(CommandArgs args)
+        {
+            var player = args.Player;
+            try
+            {
+                if (args.Parameters.Count == 0)
+                {
+                    string name = player.Group.Name;
+                    DisplayRankInfo(player, name);
+                }
+                else
+                {
+                    string parameter = args.Parameters[0];
+                    DisplayRankInfo(player, parameter);
+                }
+            }
+            catch (Exception ex)
+            {
+                TShock.Log.Error($"Error in ShowRankInfo: {ex.Message}");
+                player.SendErrorMessage("An error occurred while retrieving rank information.");
+            }
+        }
+
+        private static async void DisplayRankInfo(TSPlayer player, string rankName)
+        {
+            if (!config.RankInfos.TryGetValue(rankName, out var rankInfo))
+            {
+                player.SendErrorMessage($"No information available for rank: {rankName}");
+                return;
+            }
+
+            var sb = new StringBuilder();
+            sb.AppendLine("----------------------------------------");
+            sb.AppendLine($"Rank: {rankInfo.Name}");
+            sb.AppendLine(
+                $"Type: {(rankInfo.IsLeaderboardRank ? "Leaderboard Rank" : "Regular Rank")}"
+            );
+
+            if (rankInfo.IsLeaderboardRank)
+            {
+                string position = rankName switch
+                {
+                    "Deity" => "(Rank 1)",
+                    "Saint" => "(Rank 2)",
+                    "Hierophant" => "(Rank 3)",
+                    "Emperor" => "(Rank 4)",
+                    "Heir" => "(Rank 5-6)",
+                    "Chancellor" => "(Rank 7-8)",
+                    "Duke" => "(Rank 9-10)",
+                    _ => "",
+                };
+                sb.AppendLine($"Position: {position}");
+            }
+
+            sb.AppendLine($"\nDescription: {rankInfo.Description}");
+
+            if (!rankInfo.IsLeaderboardRank)
+            {
+                var rank = await bank.GetRankByName(rankName);
+                if (rank != null)
+                {
+                    sb.AppendLine("\nRequirements:");
+                    sb.AppendLine(
+                        $"- {rank.RequiredCurrencyAmount:N0} {config.CurrencyName.Value}"
+                    );
+
+                    if (rankName == config.MaximumRankUpRank.Value)
+                    {
+                        sb.AppendLine("- This is the highest rank available through rankup");
+                        sb.AppendLine("- Further ranks are obtained through leaderboard position");
+                    }
+                }
+            }
+
+            if (rankInfo.Perks.Any())
+            {
+                sb.AppendLine("\nPerks:");
+                foreach (var perk in rankInfo.Perks)
+                {
+                    sb.AppendLine($"- {perk}");
+                }
+            }
+
+            if (rankInfo.IsLeaderboardRank)
+            {
+                sb.AppendLine("\nNote: Leaderboard ranking updates every 10 minutes");
+                sb.AppendLine("Use /leaderboard to view current standings");
+            }
+
+            sb.AppendLine("----------------------------------------");
+
+            foreach (var line in sb.ToString().Split('\n'))
+            {
+                player.SendMessage(line, Color.LightCyan);
+            }
+        }
+    }
+
+    public class RankInfo
+    {
+        public string Name { get; set; }
+        public bool IsLeaderboardRank { get; set; }
+        public string Description { get; set; }
+        public List<string> Perks { get; set; } = new List<string>();
     }
 }
