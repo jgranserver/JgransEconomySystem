@@ -227,12 +227,24 @@ namespace JgransEconomySystem
                                 );
                             }
 
-                            // Apply weekend bonus if active
-                            if (isWeekendBonus && config.WeekendBonusEnabled.Value)
+                            // Apply weekend bonus if active and player has a regular rank
+                            bool isRegularRank = rankMultiplier == 1.0; // Regular ranks have no multiplier
+                            if (isWeekendBonus && config.WeekendBonusEnabled.Value && isRegularRank)
                             {
                                 int preWeekendBonus = currencyAmount;
                                 currencyAmount = (int)(
                                     currencyAmount * config.WeekendBonusMultiplier.Value
+                                );
+
+                                // Show weekend bonus notification
+                                Vector2 bonusPosition =
+                                    player.TPlayer.Center + new Vector2(0, -140);
+                                player.SendData(
+                                    PacketTypes.CreateCombatTextExtended,
+                                    $"x{config.WeekendBonusMultiplier.Value:F1} Weekend Bonus!",
+                                    (int)Color.LightGreen.PackedValue,
+                                    bonusPosition.X,
+                                    bonusPosition.Y
                                 );
                             }
 
@@ -1025,11 +1037,11 @@ namespace JgransEconomySystem
                 var resetRank = config.WorldResetRank.Value;
                 var maxResetRank = config.MaximumRankUpRank.Value;
                 var affectedPlayers = new List<string>();
+                var ranks = await bank.GetRanks();
 
                 foreach (var account in TShock.UserAccounts.GetUserAccounts())
                 {
                     // Check if player's rank is higher than the reset rank
-                    var ranks = await bank.GetRanks();
                     var currentRank = ranks.FirstOrDefault(r => r.GroupName == account.Group);
                     var maxResetRankObj = ranks.FirstOrDefault(r => r.GroupName == maxResetRank);
 
@@ -1041,6 +1053,15 @@ namespace JgransEconomySystem
                         currentRank.RequiredCurrencyAmount <= maxResetRankObj.RequiredCurrencyAmount
                     )
                         continue;
+
+                    // Save previous rank before resetting
+                    var currentBalance = await bank.GetCurrencyAmount(account.ID);
+                    var position =
+                        ranks
+                            .OrderBy(r => r.RequiredCurrencyAmount)
+                            .ToList()
+                            .FindIndex(r => r.Name == currentRank.Name) + 1;
+                    await bank.SavePreviousRank(account.ID, Main.worldID.ToString(), position);
 
                     // Reset player's rank
                     TShock.UserAccounts.SetUserGroup(account, resetRank);
