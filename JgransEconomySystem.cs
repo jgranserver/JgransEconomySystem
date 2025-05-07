@@ -274,23 +274,48 @@ namespace JgransEconomySystem
             }
         }
 
+        private double CalculateHostileNPCChance(NPC npc)
+        {
+            return Math.Min(
+                35.0
+                    + (double)npc.lifeMax / 100.0 * 0.5
+                    + (double)npc.damage / 20.0 * 0.5
+                    + (double)npc.defense / 10.0 * 0.5
+                    + (double)npc.value / 100.0 * 0.2,
+                75.0
+            );
+        }
+
         private double CalculateDropChance(NPC npc, bool isHardmode)
         {
+            // Calculate base chance based on NPC type
             double baseChance = npc switch
             {
-                var n when NPCType.IsBoss3(n.netID) => 100.0, // 100% for tier 3 bosses
-                var n when NPCType.IsBoss2(n.netID) => 100.0, // 100% for tier 2 bosses
-                var n when NPCType.IsBoss1(n.netID) => 100.0, // 100% for tier 1 bosses
-                var n when NPCType.IsSpecial(n.netID) => 50.0, // 50% for special NPCs
-                var n when NPCType.IsHostile(n.netID) => 25.0, // 25% for hostile NPCs
-                _ => 15.0, // 15% for normal NPCs
+                var n when NPCType.IsBoss3(n.netID) => 100.0, // Tier 3 bosses
+                var n when NPCType.IsBoss2(n.netID) => 100.0, // Tier 2 bosses
+                var n when NPCType.IsBoss1(n.netID) => 100.0, // Tier 1 bosses
+                var n when NPCType.IsSpecial(n.netID) => 65.0, // Special NPCs
+                var n when NPCType.IsHostile(n.netID) => CalculateHostileNPCChance(npc),
+                _ => 20.0, // Normal NPCs
             };
 
-            // Increase chance in hardmode
-            if (isHardmode)
-                baseChance *= 0.8;
+            // Apply multipliers based on conditions
+            double finalChance = baseChance;
 
-            return Math.Min(baseChance, 100.0); // Cap at 100%
+            // Hardmode multiplier
+            if (isHardmode)
+                finalChance *= 1.2; // 20% increase in hardmode
+
+            // Night time bonus
+            if (!Main.dayTime)
+                finalChance *= 1.15; // 15% increase at night
+
+            // Underground bonus
+            if (npc.position.Y > Main.worldSurface * 16.0)
+                finalChance *= 1.1; // 10% increase underground
+
+            // Cap at 100%
+            return Math.Min(finalChance, 100.0);
         }
 
         private int CalculateCurrencyAmount(NPC npc)
