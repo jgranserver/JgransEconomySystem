@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("JgransEconomySystem")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+3d35efaad84851d552906b2324d81a5860869eb1")]
 [assembly: System.Reflection.AssemblyProductAttribute("JgransEconomySystem")]
 [assembly: System.Reflection.AssemblyTitleAttribute("JgransEconomySystem")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
