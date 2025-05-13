@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Threading;
 using Microsoft.Data.Sqlite;
 using Microsoft.Xna.Framework;
 using Terraria;
@@ -26,6 +28,30 @@ namespace JgransEconomySystem
         public const string ReceivedFromVoting = "Received from voting the server";
         public const string PurchasedFromShop = "Bought an item from shop";
         public const string SoldItemToShop = "Sold an item from shop";
+
+        private static readonly ConcurrentQueue<TransactionBatch> pendingTransactions =
+            new ConcurrentQueue<TransactionBatch>();
+        public static readonly Timer batchProcessingTimer;
+        private const int BATCH_SIZE = 100;
+        private const int BATCH_INTERVAL_MS = 5000; // Process every 5 seconds
+
+        static Transaction()
+        {
+            batchProcessingTimer = new Timer(
+                ProcessPendingTransactions,
+                null,
+                BATCH_INTERVAL_MS,
+                BATCH_INTERVAL_MS
+            );
+        }
+
+        private class TransactionBatch
+        {
+            public string PlayerName { get; set; }
+            public string Reason { get; set; }
+            public int Amount { get; set; }
+            public DateTime Timestamp { get; set; }
+        }
 
         private static int CalculateTax(int amount)
         {
@@ -69,21 +95,28 @@ namespace JgransEconomySystem
 
         public static async Task RecordTransaction(string playerName, string reason, int amount)
         {
-            using (var connection = new SqliteConnection(connectionString))
+            if (reason.Contains("killing"))
             {
+                // Queue NPC kill transactions for batch processing
+                QueueTransaction(playerName, reason, amount);
+            }
+            else
+            {
+                // Process other transactions immediately (payments, shop transactions, etc.)
+                using var connection = new SqliteConnection(connectionString);
                 await connection.OpenAsync();
 
-                using (var command = connection.CreateCommand())
-                {
-                    command.CommandText =
-                        @"INSERT INTO TransactionData (PlayerName, Reason, Amount) 
-										VALUES (@PlayerName, @Reason, @Amount)";
-                    command.Parameters.AddWithValue("@PlayerName", playerName);
-                    command.Parameters.AddWithValue("@Reason", reason);
-                    command.Parameters.AddWithValue("@Amount", amount);
+                using var command = connection.CreateCommand();
+                command.CommandText =
+                    @"
+                    INSERT INTO TransactionData (PlayerName, Reason, Amount) 
+                    VALUES (@PlayerName, @Reason, @Amount)";
 
-                    await command.ExecuteNonQueryAsync();
-                }
+                command.Parameters.AddWithValue("@PlayerName", playerName);
+                command.Parameters.AddWithValue("@Reason", reason);
+                command.Parameters.AddWithValue("@Amount", amount);
+
+                await command.ExecuteNonQueryAsync();
             }
         }
 
@@ -142,6 +175,80 @@ namespace JgransEconomySystem
             }
 
             return transactions;
+        }
+
+        public static void QueueTransaction(string playerName, string reason, int amount)
+        {
+            pendingTransactions.Enqueue(
+                new TransactionBatch
+                {
+                    PlayerName = playerName,
+                    Reason = reason,
+                    Amount = amount,
+                    Timestamp = DateTime.Now,
+                }
+            );
+        }
+
+        private static async void ProcessPendingTransactions(object state)
+        {
+            if (pendingTransactions.IsEmpty)
+                return;
+
+            var transactions = new List<TransactionBatch>();
+
+            // Dequeue up to BATCH_SIZE transactions
+            while (
+                transactions.Count < BATCH_SIZE
+                && pendingTransactions.TryDequeue(out var transaction)
+            )
+            {
+                transactions.Add(transaction);
+            }
+
+            if (transactions.Count == 0)
+                return;
+
+            try
+            {
+                using var connection = new SqliteConnection(connectionString);
+                await connection.OpenAsync();
+
+                // Use a transaction for batch insert
+                using var transaction = connection.BeginTransaction();
+                using var command = connection.CreateCommand();
+
+                command.CommandText =
+                    @"
+                    INSERT INTO TransactionData (PlayerName, Reason, Amount, Timestamp) 
+                    VALUES (@PlayerName, @Reason, @Amount, @Timestamp)";
+
+                var playerNameParam = command.CreateParameter();
+                var reasonParam = command.CreateParameter();
+                var amountParam = command.CreateParameter();
+                var timestampParam = command.CreateParameter();
+
+                command.Parameters.Add(playerNameParam);
+                command.Parameters.Add(reasonParam);
+                command.Parameters.Add(amountParam);
+                command.Parameters.Add(timestampParam);
+
+                foreach (var batch in transactions)
+                {
+                    playerNameParam.Value = batch.PlayerName;
+                    reasonParam.Value = batch.Reason;
+                    amountParam.Value = batch.Amount;
+                    timestampParam.Value = batch.Timestamp;
+
+                    await command.ExecuteNonQueryAsync();
+                }
+
+                transaction.Commit();
+            }
+            catch (Exception ex)
+            {
+                TShock.Log.Error($"Error processing transaction batch: {ex.Message}");
+            }
         }
     }
 
