@@ -118,6 +118,7 @@ namespace JgransEconomySystem
                 GetDataHandlers.TileEdit -= OnTileEdit;
                 leaderboardTimer?.Dispose();
                 weekendBonusTimer?.Dispose();
+                Transaction.batchProcessingTimer?.Dispose();
             }
             base.Dispose(disposing);
         }
@@ -241,7 +242,7 @@ namespace JgransEconomySystem
                     int balance = await bank.GetCurrencyAmount(player.Account.ID);
                     int newBalance = balance + currencyAmount;
                     await bank.UpdateCurrencyAmount(player.Account.ID, newBalance);
-                    await Transaction.RecordTransaction(player.Name, reason, currencyAmount);
+                    Transaction.QueueTransaction(player.Name, reason, currencyAmount);
 
                     // Display currency gain
                     Vector2 displayPosition = player.TPlayer.Center + new Vector2(0, -100);
