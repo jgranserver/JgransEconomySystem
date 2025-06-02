@@ -1209,6 +1209,18 @@ namespace JgransEconomySystem
             }
         }
 
+        private bool IsLeaderboardRank(string groupName)
+        {
+            // Define the logic to determine if a group is a leaderboard rank
+            return groupName == config.Top1Rank.Value
+                || groupName == config.Top2Rank.Value
+                || groupName == config.Top3Rank.Value
+                || groupName == config.Top4Rank.Value
+                || groupName == config.Top56Rank.Value
+                || groupName == config.Top78Rank.Value
+                || groupName == config.Top910Rank.Value;
+        }
+
         private async Task ResetRanksOnWorldChange()
         {
             try
@@ -1221,40 +1233,55 @@ namespace JgransEconomySystem
 
                 foreach (var account in TShock.UserAccounts.GetUserAccounts())
                 {
-                    // Check if player's rank is higher than the reset rank
-                    var currentRank = ranks.FirstOrDefault(r => r.GroupName == account.Group);
-                    var maxResetRankObj = ranks.FirstOrDefault(r => r.GroupName == maxResetRank);
+                    // Check if player has a rank that should be reset
+                    bool shouldReset = false;
 
-                    if (currentRank == null || maxResetRankObj == null)
-                        continue;
-
-                    // Skip if player is already at or below the reset rank
-                    if (
-                        currentRank.RequiredCurrencyAmount <= maxResetRankObj.RequiredCurrencyAmount
-                    )
-                        continue;
-
-                    // Save previous rank before resetting
-                    var currentBalance = await bank.GetCurrencyAmount(account.ID);
-                    var position =
-                        ranks
-                            .OrderBy(r => r.RequiredCurrencyAmount)
-                            .ToList()
-                            .FindIndex(r => r.Name == currentRank.Name) + 1;
-                    await bank.SavePreviousRank(account.ID, Main.worldID.ToString(), position);
-
-                    // Reset player's rank
-                    TShock.UserAccounts.SetUserGroup(account, resetRank);
-                    affectedPlayers.Add(account.Name);
-
-                    // Notify online player
-                    var player = TShock.Players.FirstOrDefault(p => p?.Account?.ID == account.ID);
-                    if (player != null)
+                    // Check for leaderboard ranks
+                    if (IsLeaderboardRank(account.Group))
                     {
-                        player.SendMessage(
-                            $"Due to world change, your rank has been reset to {resetRank}.",
-                            Color.Orange
+                        shouldReset = true;
+                        TShock.Log.Info($"Resetting leaderboard rank for {account.Name}");
+                    }
+                    // Check for maximum rankup rank
+                    else if (account.Group == config.MaximumRankUpRank.Value)
+                    {
+                        shouldReset = true;
+                        TShock.Log.Info($"Resetting maximum rankup rank for {account.Name}");
+                    }
+
+                    if (shouldReset)
+                    {
+                        // Save previous rank before resetting
+                        var currentRank = ranks.FirstOrDefault(r => r.GroupName == account.Group);
+                        if (currentRank != null)
+                        {
+                            var position =
+                                ranks
+                                    .OrderBy(r => r.RequiredCurrencyAmount)
+                                    .ToList()
+                                    .FindIndex(r => r.Name == currentRank.Name) + 1;
+                            await bank.SavePreviousRank(
+                                account.ID,
+                                Main.worldID.ToString(),
+                                position
+                            );
+                        }
+
+                        // Reset player's rank
+                        TShock.UserAccounts.SetUserGroup(account, resetRank);
+                        affectedPlayers.Add(account.Name);
+
+                        // Notify online player
+                        var player = TShock.Players.FirstOrDefault(p =>
+                            p?.Account?.ID == account.ID
                         );
+                        if (player != null)
+                        {
+                            player.SendMessage(
+                                $"Due to world change, your rank has been reset to {resetRank}.",
+                                Color.Orange
+                            );
+                        }
                     }
                 }
 
