@@ -699,25 +699,61 @@ namespace JgransEconomySystem
 
             try
             {
-                // Check if account exists and create it if it doesn't
+                // Get server bank balance
+                int serverBalance = await bank.GetCurrencyAmount(0); // 0 is ServerBankId
+
+                // Check if server has enough funds
+                if (serverBalance < amount)
+                {
+                    player.SendErrorMessage(
+                        $"Insufficient server bank funds. Server Balance: {serverBalance:N0} {config.CurrencyName.Value}"
+                    );
+                    return;
+                }
+
+                // Check if target account exists and create it if it doesn't
                 if (!await bank.PlayerAccountExists(target.ID))
                 {
                     await bank.UpdateCurrencyAmount(target.ID, 0);
                 }
 
-                // Get current balance and add the amount
-                var currentBalance = await bank.GetCurrencyAmount(target.ID);
-                await bank.UpdateCurrencyAmount(target.ID, currentBalance + amount);
+                // Start transaction
+                var targetBalance = await bank.GetCurrencyAmount(target.ID);
+                await bank.UpdateCurrencyAmount(target.ID, targetBalance + amount); // Give to player
+                await bank.UpdateCurrencyAmount(0, serverBalance - amount); // Deduct from server bank
 
-                // Record the transaction
+                // Record transactions
                 await Transaction.RecordTransaction(
                     target.Name,
-                    $"Given by {player.Account.Name}",
+                    $"Given by admin {player.Account.Name}",
                     amount
                 );
+                await Transaction.RecordTransaction(
+                    "ServerBank",
+                    $"Given to {target.Name} by admin {player.Account.Name}",
+                    -amount
+                );
 
+                // Send notifications
                 player.SendSuccessMessage(
-                    $"Added {amount:N0} {config.CurrencyName.Value}/s to {target.Name}'s account."
+                    $"Added {amount:N0} {config.CurrencyName.Value} to {target.Name}'s account."
+                );
+                player.SendInfoMessage(
+                    $"Server bank new balance: {serverBalance - amount:N0} {config.CurrencyName.Value}"
+                );
+
+                // Notify target if online
+                var targetPlayer = TShock.Players.FirstOrDefault(p => p?.Account?.ID == target.ID);
+                if (targetPlayer != null)
+                {
+                    targetPlayer.SendSuccessMessage(
+                        $"Received {amount:N0} {config.CurrencyName.Value} from server bank."
+                    );
+                }
+
+                // Log the transaction
+                TShock.Log.Info(
+                    $"Admin {player.Name} gave {amount:N0} {config.CurrencyName.Value} to {target.Name} from server bank."
                 );
             }
             catch (Exception ex)
