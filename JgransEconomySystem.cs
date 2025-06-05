@@ -779,25 +779,73 @@ namespace JgransEconomySystem
                 return;
             }
 
-            foreach (var account in TShock.UserAccounts.GetUserAccounts())
+            try
             {
-                if (await bank.PlayerAccountExists(account.ID))
-                {
-                    var balance = await bank.GetCurrencyAmount(account.ID);
-                    await bank.UpdateCurrencyAmount(account.ID, balance + amount);
+                int activePlayerCount = 0;
+                int skippedPlayerCount = 0;
+                var thirtyDaysAgo = DateTime.Now.AddDays(-30);
 
-                    var onlinePlayer = TShock.Players.FirstOrDefault(p =>
-                        p?.Account?.ID == account.ID
-                    );
-                    onlinePlayer?.SendSuccessMessage(
-                        $"Received {amount:N0} {config.CurrencyName.Value}/s."
+                foreach (var account in TShock.UserAccounts.GetUserAccounts())
+                {
+                    // Check if account has logged in within the last 30 days
+                    if (
+                        DateTime.TryParse(account.LastAccessed, out DateTime lastAccessedDate)
+                        && lastAccessedDate < thirtyDaysAgo
+                    )
+                    {
+                        skippedPlayerCount++;
+                        continue;
+                    }
+
+                    // Check if player account exists in bank
+                    if (await bank.PlayerAccountExists(account.ID))
+                    {
+                        var balance = await bank.GetCurrencyAmount(account.ID);
+                        await bank.UpdateCurrencyAmount(account.ID, balance + amount);
+
+                        // Record transaction
+                        await Transaction.RecordTransaction(
+                            account.Name,
+                            $"Mass currency distribution by {player.Name}",
+                            amount
+                        );
+
+                        // Notify online player if they're connected
+                        var onlinePlayer = TShock.Players.FirstOrDefault(p =>
+                            p?.Account?.ID == account.ID
+                        );
+                        if (onlinePlayer != null)
+                        {
+                            onlinePlayer.SendSuccessMessage(
+                                $"Received {amount:N0} {config.CurrencyName.Value} from mass distribution."
+                            );
+                        }
+
+                        activePlayerCount++;
+                    }
+                }
+
+                // Send summary to admin
+                player.SendSuccessMessage(
+                    $"Added {amount:N0} {config.CurrencyName.Value} to {activePlayerCount} active player accounts."
+                );
+                if (skippedPlayerCount > 0)
+                {
+                    player.SendInfoMessage(
+                        $"Skipped {skippedPlayerCount} inactive accounts (no login in 30+ days)."
                     );
                 }
-            }
 
-            player.SendSuccessMessage(
-                $"Added {amount:N0} {config.CurrencyName.Value}/s to all player accounts."
-            );
+                // Log the action
+                TShock.Log.Info(
+                    $"Mass currency distribution: {player.Name} gave {amount:N0} {config.CurrencyName.Value} to {activePlayerCount} players. Skipped {skippedPlayerCount} inactive accounts."
+                );
+            }
+            catch (Exception ex)
+            {
+                TShock.Log.Error($"Error in HandleGiveAllCommand: {ex.Message}");
+                player.SendErrorMessage("An error occurred while processing the command.");
+            }
         }
 
         private async Task HandleResetAllCommand(TSPlayer player)
