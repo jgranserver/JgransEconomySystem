@@ -862,15 +862,36 @@ namespace JgransEconomySystem
 
         private void OnNetGetData(GetDataEventArgs args)
         {
-            TSPlayer player = TShock.Players[args.Msg.whoAmI];
+            if (args.MsgID != PacketTypes.SpawnBossorInvasion)
+                return;
 
-            if (args.MsgID == PacketTypes.SpawnBossorInvasion)
-            {
-                spawned = true;
-                TSPlayer.All.SendInfoMessage(
-                    "Boss Spawned! The one who gets the last hit gets the jspoints!"
-                );
-            }
+            TSPlayer player = TShock.Players[args.Msg.whoAmI];
+            if (player == null)
+                return;
+
+            // Wait briefly to allow boss to spawn
+            Task.Delay(100)
+                .ContinueWith(_ =>
+                {
+                    // Check if any boss NPC is actually active
+                    bool bossActive = Main.npc.Any(n =>
+                        n.active
+                        && (
+                            NPCType.IsBoss1(n.netID)
+                            || NPCType.IsBoss2(n.netID)
+                            || NPCType.IsBoss3(n.netID)
+                        )
+                    );
+
+                    if (bossActive)
+                    {
+                        spawned = true;
+                        TSPlayer.All.SendInfoMessage(
+                            $"{player.Name} spawned a boss! The one who gets the last hit gets the {config.CurrencyName.Value}!"
+                        );
+                        TShock.Log.Info($"Boss spawn detected by {player.Name}");
+                    }
+                });
         }
 
         private async void OnServerChat(ServerChatEventArgs args)
