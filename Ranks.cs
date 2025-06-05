@@ -521,17 +521,27 @@ namespace JgransEconomySystem
             try
             {
                 TShock.Log.Info("Starting leaderboard rank update...");
-                // Replace GetTopPlayersAsync with GetAllPlayersDataAsync
                 var allPlayers = await bank.GetAllPlayersDataAsync();
                 var qualifiedPlayers = new List<(int PlayerId, int CurrencyAmount)>();
                 var ranks = await bank.GetRanks();
+                var thirtyDaysAgo = DateTime.Now.AddDays(-30);
 
-                // First, filter qualified players
+                // First, filter qualified and active players
                 foreach (var (playerId, currency) in allPlayers)
                 {
                     var account = TShock.UserAccounts.GetUserAccountByID(playerId);
                     if (account == null)
                         continue;
+
+                    // Check if account is active (logged in within last 30 days)
+                    if (
+                        !DateTime.TryParse(account.LastAccessed, out DateTime lastAccessedDate)
+                        || lastAccessedDate < thirtyDaysAgo
+                    )
+                    {
+                        TShock.Log.Info($"{account.Name} skipped - inactive for over 30 days");
+                        continue;
+                    }
 
                     // Check if player is qualified (at or above MaximumRankUpRank)
                     if (IsQualifiedForLeaderboard(account.Group))
@@ -549,7 +559,7 @@ namespace JgransEconomySystem
                     }
                 }
 
-                // Take top 10 from qualified players only
+                // Take top 10 from qualified active players only
                 var topPlayers = qualifiedPlayers
                     .OrderByDescending(p => p.CurrencyAmount)
                     .Take(10)
@@ -558,27 +568,38 @@ namespace JgransEconomySystem
                 // Reset players who are no longer in top 10
                 foreach (var userAccount in TShock.UserAccounts.GetUserAccounts())
                 {
-                    if (
-                        IsLeaderboardRank(userAccount.Group)
-                        && !topPlayers.Any(p => p.PlayerId == userAccount.ID)
-                    )
+                    if (IsLeaderboardRank(userAccount.Group))
                     {
-                        TShock.Log.Info(
-                            $"Resetting {userAccount.Name} to {config.MaximumRankUpRank.Value}"
-                        );
-                        TShock.UserAccounts.SetUserGroup(
-                            userAccount,
-                            config.MaximumRankUpRank.Value
-                        );
+                        bool shouldReset = !topPlayers.Any(p => p.PlayerId == userAccount.ID);
+                        bool isInactive =
+                            !DateTime.TryParse(userAccount.LastAccessed, out DateTime lastAccess)
+                            || lastAccess < thirtyDaysAgo;
 
-                        var player = TShock.Players.FirstOrDefault(p =>
-                            p?.Account?.ID == userAccount.ID
-                        );
-                        if (player != null)
+                        if (shouldReset || isInactive)
                         {
-                            player.SendInfoMessage(
-                                $"You are no longer in the top 10. Your rank has been reset to {config.MaximumRankUpRank.Value}."
+                            TShock.Log.Info(
+                                $"Resetting {userAccount.Name} to {config.MaximumRankUpRank.Value} "
+                                    + $"({(isInactive ? "inactive" : "no longer in top 10")})"
                             );
+
+                            TShock.UserAccounts.SetUserGroup(
+                                userAccount,
+                                config.MaximumRankUpRank.Value
+                            );
+
+                            var player = TShock.Players.FirstOrDefault(p =>
+                                p?.Account?.ID == userAccount.ID
+                            );
+                            if (player != null)
+                            {
+                                string reason = isInactive
+                                    ? "due to inactivity"
+                                    : "as you are no longer in the top 10";
+
+                                player.SendInfoMessage(
+                                    $"Your leaderboard rank has been reset to {config.MaximumRankUpRank.Value} {reason}."
+                                );
+                            }
                         }
                     }
                 }
@@ -593,6 +614,7 @@ namespace JgransEconomySystem
                     if (userAccount == null)
                         continue;
 
+#pragma warning disable CS8602 // Dereference of a possibly null reference.
                     string newRank = position switch
                     {
                         1 => config.Top1Rank.Value,
@@ -604,6 +626,7 @@ namespace JgransEconomySystem
                         9 or 10 => config.Top910Rank.Value,
                         _ => config.MaximumRankUpRank.Value,
                     };
+#pragma warning restore CS8602 // Dereference of a possibly null reference.
 
                     if (newRank != userAccount.Group)
                     {
