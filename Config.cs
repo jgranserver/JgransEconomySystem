@@ -671,7 +671,7 @@ public class JgransEconomySystemConfig
     public static JgransEconomySystemConfig Read(string filePath)
     {
         return File.Exists(filePath)
-            ? JsonConvert.DeserializeObject<JgransEconomySystemConfig>(File.ReadAllText(filePath))
+            ? JsonConvert.DeserializeObject<JgransEconomySystemConfig>(File.ReadAllText(filePath)) ?? new JgransEconomySystemConfig()
             : new JgransEconomySystemConfig();
     }
 
@@ -683,8 +683,8 @@ public class JgransEconomySystemConfig
 
     public class ConfigProperty<T>
     {
-        public string Description { get; set; }
+        public string Description { get; set; } = string.Empty;
 
-        public T Value { get; set; }
+        public T Value { get; set; } = default!;
     }
 }

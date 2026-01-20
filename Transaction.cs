@@ -38,7 +38,7 @@ namespace JgransEconomySystem
         static Transaction()
         {
             batchProcessingTimer = new Timer(
-                ProcessPendingTransactions,
+                ProcessPendingTransactions!,
                 null,
                 BATCH_INTERVAL_MS,
                 BATCH_INTERVAL_MS
@@ -47,8 +47,8 @@ namespace JgransEconomySystem
 
         private class TransactionBatch
         {
-            public string PlayerName { get; set; }
-            public string Reason { get; set; }
+            public string PlayerName { get; set; } = string.Empty;
+            public string Reason { get; set; } = string.Empty;
             public int Amount { get; set; }
             public DateTime Timestamp { get; set; }
         }
@@ -163,8 +163,8 @@ namespace JgransEconomySystem
                             var transaction = new TransactionData
                             {
                                 Id = Convert.ToInt32(reader["Id"]),
-                                PlayerName = reader["PlayerName"].ToString(),
-                                Reason = reader["Reason"].ToString(),
+                                PlayerName = reader["PlayerName"].ToString() ?? string.Empty,
+                                Reason = reader["Reason"].ToString() ?? string.Empty,
                                 Amount = Convert.ToInt32(reader["Amount"]),
                                 Timestamp = Convert.ToDateTime(reader["Timestamp"]),
                             };
@@ -255,8 +255,8 @@ namespace JgransEconomySystem
     public class TransactionData
     {
         public int Id { get; set; }
-        public string PlayerName { get; set; }
-        public string Reason { get; set; }
+        public string PlayerName { get; set; } = string.Empty;
+        public string Reason { get; set; } = string.Empty;
         public int Amount { get; set; }
         public DateTime Timestamp { get; set; }
     }

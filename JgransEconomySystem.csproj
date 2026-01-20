@@ -7,4 +7,7 @@
   <ItemGroup>
     <PackageReference Include="TShock" Version="5.2.4"/>
   </ItemGroup>
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <Exec Command="xcopy &quot;$(TargetPath)&quot; &quot;C:\Users\Admin\Documents\TShock\ServerPlugins\&quot; /Y /I" />
+  </Target>
 </Project>

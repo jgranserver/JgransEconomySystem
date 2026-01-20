@@ -16,10 +16,10 @@ namespace JgransEconomySystem
 
         private static EconomyDatabase bank = new EconomyDatabase(path);
 
-        public string Name { get; set; }
+        public string Name { get; set; } = string.Empty;
         public int RequiredCurrencyAmount { get; set; }
-        public string GroupName { get; set; }
-        public string NextRank { get; set; }
+        public string GroupName { get; set; } = string.Empty;
+        public string NextRank { get; set; } = string.Empty;
 
         // Add any additional properties or methods you need
 
@@ -122,13 +122,13 @@ namespace JgransEconomySystem
             {
                 // Check if player has a leaderboard rank
                 if (
-                    player.Group.Name == config.Top1Rank.Value
-                    || player.Group.Name == config.Top2Rank.Value
-                    || player.Group.Name == config.Top3Rank.Value
-                    || player.Group.Name == config.Top4Rank.Value
-                    || player.Group.Name == config.Top56Rank.Value
-                    || player.Group.Name == config.Top78Rank.Value
-                    || player.Group.Name == config.Top910Rank.Value
+                    player.Group.Name == config?.Top1Rank.Value
+                    || player.Group.Name == config?.Top2Rank.Value
+                    || player.Group.Name == config?.Top3Rank.Value
+                    || player.Group.Name == config?.Top4Rank.Value
+                    || player.Group.Name == config?.Top56Rank.Value
+                    || player.Group.Name == config?.Top78Rank.Value
+                    || player.Group.Name == config?.Top910Rank.Value
                 )
                 {
                     player.SendErrorMessage("You cannot use /rankup with a leaderboard rank.");
@@ -151,7 +151,7 @@ namespace JgransEconomySystem
                     return;
                 }
 
-                var currentCurrencyAmount = await bank.GetCurrencyAmount(player.Account.ID);
+                var currentCurrencyAmount = await bank.GetCurrencyAmount(player.Account?.ID ?? 0);
                 var ranks = await bank.GetRanks();
 
                 // Get current rank
@@ -187,12 +187,12 @@ namespace JgransEconomySystem
 
                 // Calculate costs including tax
                 int previousPosition = await bank.GetPreviousRank(
-                    player.Account.ID,
+                    player.Account?.ID ?? 0,
                     Main.worldID.ToString()
                 );
                 double additionalMultiplier = GetAdditionalCostMultiplier(previousPosition);
                 int baseCost = nextRank.RequiredCurrencyAmount;
-                double tax = baseCost * config.TaxRate.Value;
+                double tax = baseCost * (config?.TaxRate.Value ?? 0);
                 double additionalCost = baseCost * additionalMultiplier;
                 double totalCost = baseCost + tax + additionalCost;
 
@@ -208,7 +208,7 @@ namespace JgransEconomySystem
                         player.SendInfoMessage($"Tax: {tax:N0}");
                     player.SendInfoMessage($"Total cost: {totalCost:N0}");
                     player.SendInfoMessage(
-                        $"You need {totalCost - currentCurrencyAmount:N0} more {config.CurrencyName.Value}"
+                        $"You need {totalCost - currentCurrencyAmount:N0} more {config?.CurrencyName.Value ?? "currency"}"
                     );
                     return;
                 }
@@ -217,7 +217,7 @@ namespace JgransEconomySystem
                 var newBalance = currentCurrencyAmount - totalCost;
 
                 // Update currency first
-                await bank.UpdateCurrencyAmount(player.Account.ID, (int)newBalance);
+                await bank.UpdateCurrencyAmount(player.Account?.ID ?? 0, (int)newBalance);
 
                 // Record the transaction
                 await Transaction.RecordTransaction(
@@ -235,14 +235,14 @@ namespace JgransEconomySystem
                         $"Congratulations! You have been promoted to {nextRank.Name}!"
                     );
                     player.SendMessage(
-                        $"New balance: {newBalance:N0} {config.CurrencyName.Value}",
+                        $"New balance: {newBalance:N0} {config?.CurrencyName.Value ?? "currency"}",
                         Color.LightBlue
                     );
 
                     if (tax > 0)
                     {
                         player.SendMessage(
-                            $"Tax paid: {tax:N0} {config.CurrencyName.Value}",
+                            $"Tax paid: {tax:N0} {config?.CurrencyName.Value ?? "currency"}",
                             Color.LightBlue
                         );
                     }
@@ -379,14 +379,14 @@ namespace JgransEconomySystem
 
                     foreach (var rank in sortedRanks)
                     {
-                        if (config.RankInfos.TryGetValue(rank.Name, out var rankInfo))
+                        if (config?.RankInfos.TryGetValue(rank.Name, out var rankInfo) == true)
                         {
                             string rankType = rankInfo.IsLeaderboardRank
                                 ? "[Leaderboard]"
                                 : "[Regular]";
                             string costInfo = rankInfo.IsLeaderboardRank
                                 ? "Based on currency leaderboard"
-                                : $"{rank.RequiredCurrencyAmount:N0} {config.CurrencyName.Value}";
+                                : $"{rank.RequiredCurrencyAmount:N0} {config?.CurrencyName.Value}";
 
                             player.SendMessage(
                                 $"{rank.Name} {rankType} - Base Cost: {costInfo}",
@@ -397,7 +397,7 @@ namespace JgransEconomySystem
                         {
                             // Fallback if rank info is not found
                             player.SendMessage(
-                                $"{rank.Name} - Cost: {rank.RequiredCurrencyAmount:N0} {config.CurrencyName.Value}",
+                                $"{rank.Name} - Cost: {rank.RequiredCurrencyAmount:N0} {config?.CurrencyName.Value ?? "currency"}",
                                 Color.LightCyan
                             );
                         }
@@ -578,13 +578,13 @@ namespace JgransEconomySystem
                         if (shouldReset || isInactive)
                         {
                             TShock.Log.Info(
-                                $"Resetting {userAccount.Name} to {config.MaximumRankUpRank.Value} "
+                                $"Resetting {userAccount.Name} to {config?.MaximumRankUpRank.Value} "
                                     + $"({(isInactive ? "inactive" : "no longer in top 10")})"
                             );
 
                             TShock.UserAccounts.SetUserGroup(
                                 userAccount,
-                                config.MaximumRankUpRank.Value
+                                config?.MaximumRankUpRank.Value ?? "default"
                             );
 
                             var player = TShock.Players.FirstOrDefault(p =>
@@ -597,7 +597,7 @@ namespace JgransEconomySystem
                                     : "as you are no longer in the top 10";
 
                                 player.SendInfoMessage(
-                                    $"Your leaderboard rank has been reset to {config.MaximumRankUpRank.Value} {reason}."
+                                    $"Your leaderboard rank has been reset to {config?.MaximumRankUpRank.Value} {reason}."
                                 );
                             }
                         }
@@ -686,13 +686,13 @@ namespace JgransEconomySystem
 
         private static bool IsLeaderboardRank(string rank)
         {
-            return rank == config.Top1Rank.Value
-                || rank == config.Top2Rank.Value
-                || rank == config.Top3Rank.Value
-                || rank == config.Top4Rank.Value
-                || rank == config.Top56Rank.Value
-                || rank == config.Top78Rank.Value
-                || rank == config.Top910Rank.Value;
+            return rank == config?.Top1Rank.Value
+                || rank == config?.Top2Rank.Value
+                || rank == config?.Top3Rank.Value
+                || rank == config?.Top4Rank.Value
+                || rank == config?.Top56Rank.Value
+                || rank == config?.Top78Rank.Value
+                || rank == config?.Top910Rank.Value;
         }
 
         private static bool IsQualifiedForLeaderboard(string currentRank)
@@ -709,7 +709,7 @@ namespace JgransEconomySystem
 
                 // Start with MaximumRankUpRank and traverse up using NextRank
                 var maxRankObj = ranks.FirstOrDefault(r =>
-                    r.Name == config.MaximumRankUpRank.Value
+                    r.Name == config?.MaximumRankUpRank.Value
                 );
                 if (maxRankObj == null)
                     return false;
@@ -785,18 +785,18 @@ namespace JgransEconomySystem
             if (config == null || !config.RankInfos.TryGetValue(rankName, out var rankInfo))
             {
                 // If no exact match, try case-insensitive regex match
-                var matchingRank = config.RankInfos.FirstOrDefault(r =>
+                var matchingRank = config?.RankInfos.FirstOrDefault(r =>
                     Regex.IsMatch(r.Key, $"^{Regex.Escape(rankName)}$", RegexOptions.IgnoreCase)
-                );
+                ) ?? default;
 
                 if (matchingRank.Key == null)
                 {
                     // If still no match, try partial match
-                    var partialMatches = config
+                    var partialMatches = config?
                         .RankInfos.Where(r =>
                             Regex.IsMatch(r.Key, Regex.Escape(rankName), RegexOptions.IgnoreCase)
                         )
-                        .ToList();
+                        .ToList() ?? new List<KeyValuePair<string, RankInfo>>();
 
                     if (partialMatches.Count > 1)
                     {
@@ -864,10 +864,10 @@ namespace JgransEconomySystem
                 {
                     sb.AppendLine("\nRequirements:");
                     sb.AppendLine(
-                        $"- {rank.RequiredCurrencyAmount:N0} {config.CurrencyName.Value}"
+                        $"- {rank.RequiredCurrencyAmount:N0} {config?.CurrencyName.Value ?? "currency"}"
                     );
 
-                    if (rankName == config.MaximumRankUpRank.Value)
+                    if (rankName == config?.MaximumRankUpRank.Value)
                     {
                         sb.AppendLine("- This is the highest rank available through rankup");
                         sb.AppendLine("- Further ranks are obtained through leaderboard position");
@@ -901,9 +901,9 @@ namespace JgransEconomySystem
 
     public class RankInfo
     {
-        public string Name { get; set; }
+        public string Name { get; set; } = string.Empty;
         public bool IsLeaderboardRank { get; set; }
-        public string Description { get; set; }
+        public string Description { get; set; } = string.Empty;
         public List<string> Perks { get; set; } = new List<string>();
     }
 }

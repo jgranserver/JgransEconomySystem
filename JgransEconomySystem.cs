@@ -14,21 +14,20 @@ namespace JgransEconomySystem
     [ApiVersion(2, 1)]
     public class JgransEconomySystem : TerrariaPlugin
     {
-        private EconomyDatabase bank;
-        private JgransEconomySystemConfig config;
+        private EconomyDatabase bank = null!;
+        private JgransEconomySystemConfig config = null!;
         private string path = Path.Combine(TShock.SavePath, "JgransEconomyBanks.sqlite");
         private string configPath = Path.Combine(TShock.SavePath, "JgransEconomySystemConfig.json");
         public static bool spawned = false;
         private Dictionary<int, DateTime> lastNpcStrikeTime = new Dictionary<int, DateTime>();
-        private Timer weekendBonusTimer;
+        private Timer weekendBonusTimer = null!;
         private bool isWeekendBonus = false;
-        private Timer leaderboardTimer;
         private Dictionary<int, PaymentConfirmation> pendingPayments =
             new Dictionary<int, PaymentConfirmation>();
 
         private class PaymentConfirmation
         {
-            public List<UserAccount> MatchingAccounts { get; set; }
+            public List<UserAccount> MatchingAccounts { get; set; } = new List<UserAccount>();
             public int Amount { get; set; }
             public DateTime CreatedAt { get; set; }
         }
@@ -116,7 +115,6 @@ namespace JgransEconomySystem
                 ServerApi.Hooks.GameUpdate.Deregister(this, OnGameUpdate);
 
                 GetDataHandlers.TileEdit -= OnTileEdit;
-                leaderboardTimer?.Dispose();
                 weekendBonusTimer?.Dispose();
                 Transaction.batchProcessingTimer?.Dispose();
             }
@@ -126,9 +124,9 @@ namespace JgransEconomySystem
         private void ReloadConfigCommand(CommandArgs args)
         {
             string json = File.ReadAllText(configPath);
-            JgransEconomySystemConfig newConfig =
+            JgransEconomySystemConfig? newConfig =
                 JsonConvert.DeserializeObject<JgransEconomySystemConfig>(json);
-            config = newConfig;
+            config = newConfig ?? new JgransEconomySystemConfig();
 
             TShock.Log.ConsoleInfo("JgransEconomySystemConfig has been reloaded.");
         }
@@ -370,7 +368,7 @@ namespace JgransEconomySystem
                 || NPCType.IsBoss3(npc.netID);
         }
 
-        public void OnTileEdit(object sender, GetDataHandlers.TileEditEventArgs e)
+        public void OnTileEdit(object? sender, GetDataHandlers.TileEditEventArgs e)
         {
             if (e.Handled || e.Player == null || e.Action != GetDataHandlers.EditAction.KillTile)
                 return;
@@ -933,12 +931,12 @@ namespace JgransEconomySystem
             }
         }
 
-        private async Task HandleBossSpawnCommand(TSPlayer player, string message)
+        private Task HandleBossSpawnCommand(TSPlayer player, string message)
         {
             if (!player.Group.HasPermission("tshock.npc.summonboss"))
             {
                 player.SendErrorMessage("You don't have permission to spawn bosses.");
-                return;
+                return Task.CompletedTask;
             }
 
             if (Commands.HandleCommand(TSPlayer.Server, message))
@@ -948,6 +946,7 @@ namespace JgransEconomySystem
                     "Boss Spawned! The one who gets the last hit gets the jspoints!"
                 );
             }
+            return Task.CompletedTask;
         }
 
         private async Task HandleBuffCommand(TSPlayer player, string[] cmdParts)
@@ -1159,7 +1158,7 @@ namespace JgransEconomySystem
             }
         }
 
-        private async void LeaderboardCommandAsync(CommandArgs args)
+        private void LeaderboardCommandAsync(CommandArgs args)
         {
             LeaderboardCheckUpdate();
         }

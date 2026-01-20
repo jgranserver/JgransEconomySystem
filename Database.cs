@@ -214,7 +214,7 @@ namespace JgransEconomySystem
                                     ? 0
                                     : reader.GetInt32(1),
                                 GroupName = reader.GetString(2),
-                                NextRank = reader.IsDBNull(3) ? null : reader.GetString(3),
+                                NextRank = reader.IsDBNull(3) ? string.Empty : reader.GetString(3),
                             };
                             ranks.Add(rank);
                         }
@@ -264,13 +264,13 @@ namespace JgransEconomySystem
                                     ? 0
                                     : reader.GetInt32(1),
                                 GroupName = reader.GetString(2),
-                                NextRank = reader.IsDBNull(3) ? null : reader.GetString(3),
+                                NextRank = reader.IsDBNull(3) ? string.Empty : reader.GetString(3),
                             };
                         }
                     }
                 }
             }
-            return null;
+            return null!;
         }
 
         public async Task<List<string>> GetAllRankNames()
