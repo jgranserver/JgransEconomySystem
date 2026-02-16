@@ -5,6 +5,7 @@ using Newtonsoft.Json;
 using Terraria;
 using Terraria.GameContent.Drawing;
 using Terraria.ID;
+using Terraria.IO;
 using TerrariaApi.Server;
 using TShockAPI;
 using TShockAPI.DB;
@@ -24,6 +25,12 @@ namespace JgransEconomySystem
         private bool isWeekendBonus = false;
         private Dictionary<int, PaymentConfirmation> pendingPayments =
             new Dictionary<int, PaymentConfirmation>();
+
+        // Helper property for OTAPI3 compatibility
+        private static int WorldID => Main.ActiveWorldFileData?.UniqueId.GetHashCode() ?? 0;
+        
+        // Random instance for OTAPI3 compatibility (Main.rand no longer exists)
+        private static readonly Random random = new Random();
 
         private class PaymentConfirmation
         {
@@ -171,7 +178,7 @@ namespace JgransEconomySystem
 
             // Calculate drop chance and currency
             double dropChance = CalculateDropChance(npc, isHardmode);
-            double roll = Main.rand.NextDouble() * 100;
+            double roll = random.NextDouble() * 100;
             int currencyAmount = 0;
             string reason = "";
 
@@ -276,13 +283,31 @@ namespace JgransEconomySystem
         private double CalculateHostileNPCChance(NPC npc)
         {
             return Math.Min(
-                35.0
+                25.0
                     + (double)npc.lifeMax / 100.0 * 0.5
-                    + (double)npc.damage / 20.0 * 0.5
-                    + (double)npc.defense / 10.0 * 0.5
-                    + (double)npc.value / 100.0 * 0.2,
-                75.0
+                    + (double)npc.damage / 20.0 * 0.8
+                    + (double)npc.defense / 10.0 * 0.6
+                    + (double)npc.value / 100.0 * 0.3,
+                80.0
             );
+        }
+
+        /// <summary>
+        /// Calculates a difficulty multiplier (0.2x–3.0x) based on NPC stats.
+        /// Used to scale currency rewards so harder enemies drop more.
+        /// </summary>
+        private double CalculateDifficultyMultiplier(NPC npc)
+        {
+            // Scale based on NPC stats relative to baseline values
+            double hpFactor = Math.Clamp(npc.lifeMax / 200.0, 0.1, 5.0);
+            double dmgFactor = Math.Clamp(npc.damage / 40.0, 0.1, 3.0);
+            double defFactor = Math.Clamp(npc.defense / 20.0, 0.1, 2.0);
+
+            // Weighted average: HP matters most, then damage, then defense
+            double raw = (hpFactor * 0.5) + (dmgFactor * 0.3) + (defFactor * 0.2);
+
+            // Clamp final result to 0.2x–3.0x range
+            return Math.Clamp(raw, 0.2, 3.0);
         }
 
         private double CalculateDropChance(NPC npc, bool isHardmode)
@@ -319,32 +344,39 @@ namespace JgransEconomySystem
 
         private int CalculateCurrencyAmount(NPC npc)
         {
+            double difficultyMult = CalculateDifficultyMultiplier(npc);
+
             int baseAmount = npc switch
             {
-                var n when NPCType.IsBoss3(n.netID) => Main.rand.Next(
+                // Boss tiers use fixed curated amounts (no difficulty scaling)
+                var n when NPCType.IsBoss3(n.netID) => random.Next(
                     config.Boss3MaxAmount.Value / 2,
                     config.Boss3MaxAmount.Value
                 ),
-                var n when NPCType.IsBoss2(n.netID) => Main.rand.Next(
+                var n when NPCType.IsBoss2(n.netID) => random.Next(
                     config.Boss2MaxAmount.Value / 2,
                     config.Boss2MaxAmount.Value
                 ),
-                var n when NPCType.IsBoss1(n.netID) => Main.rand.Next(
+                var n when NPCType.IsBoss1(n.netID) => random.Next(
                     config.Boss1MaxAmount.Value / 2,
                     config.Boss1MaxAmount.Value
                 ),
-                var n when NPCType.IsSpecial(n.netID) => Main.rand.Next(
+                // Special, Hostile, and Normal scale by difficulty
+                var n when NPCType.IsSpecial(n.netID) => (int)(random.Next(
                     config.SpecialMaxAmount.Value / 2,
                     config.SpecialMaxAmount.Value
-                ),
-                var n when NPCType.IsHostile(n.netID) => Main.rand.Next(
+                ) * difficultyMult),
+                var n when NPCType.IsHostile(n.netID) => (int)(random.Next(
                     config.HostileMaxAmount.Value / 2,
                     config.HostileMaxAmount.Value
-                ),
-                _ => Main.rand.Next(config.NormalMaxAmount.Value / 2, config.NormalMaxAmount.Value),
+                ) * difficultyMult),
+                _ => (int)(random.Next(
+                    config.NormalMaxAmount.Value / 2,
+                    config.NormalMaxAmount.Value
+                ) * difficultyMult),
             };
 
-            return baseAmount;
+            return Math.Max(baseAmount, 1); // Never drop 0
         }
 
         private string GetDropReason(NPC npc)
@@ -418,6 +450,10 @@ namespace JgransEconomySystem
                     await HandlePayCommand(player, cmd);
                     break;
 
+                case "serverbal":
+                    await HandleServerBalanceCommand(player);
+                    break;
+
                 case "resetall":
                     await HandleResetAllCommand(player);
                     break;
@@ -447,6 +483,10 @@ namespace JgransEconomySystem
                 );
                 player.SendMessage(
                     "/bank giveall <amount> - Give currency to all players",
+                    Color.LightBlue
+                );
+                player.SendMessage(
+                    "/bank serverbal - Check server bank balance",
                     Color.LightBlue
                 );
             }
@@ -642,29 +682,39 @@ namespace JgransEconomySystem
                     return;
                 }
 
-                // Process the payment
+                // Calculate tax
+                int taxAmount = (int)Math.Ceiling(amount * config.TaxRate.Value);
+                int netAmount = amount - taxAmount;
+
+                // Process the payment: sender pays full amount, receiver gets net amount
                 int receiverBalance = await bank.GetCurrencyAmount(receiver.ID);
                 await bank.UpdateCurrencyAmount(sender.Account.ID, senderBalance - amount);
-                await bank.UpdateCurrencyAmount(receiver.ID, receiverBalance + amount);
+                await bank.UpdateCurrencyAmount(receiver.ID, receiverBalance + netAmount);
 
-                // Record transaction
+                // Record transaction and tax
                 await Transaction.RecordTransaction(
                     receiver.Name,
                     Transaction.ReceivedFromPayment + sender.Name,
-                    amount
+                    netAmount
                 );
+                if (taxAmount > 0)
+                {
+                    await Transaction.RecordTaxTransaction(taxAmount);
+                }
 
                 // Notify both parties
                 sender.SendSuccessMessage(
                     $"Paid {amount:N0} {config.CurrencyName.Value} to {receiver.Name}"
+                        + (taxAmount > 0 ? $" (Tax: {taxAmount:N0})" : "")
                 );
                 receiverPlayer.SendSuccessMessage(
-                    $"Received {amount:N0} {config.CurrencyName.Value} from {sender.Name}"
+                    $"Received {netAmount:N0} {config.CurrencyName.Value} from {sender.Name}"
+                        + (taxAmount > 0 ? $" (Tax: {taxAmount:N0})" : "")
                 );
 
                 // Log the transaction
                 TShock.Log.Info(
-                    $"Payment: {sender.Name} -> {receiver.Name}: {amount:N0} {config.CurrencyName.Value}"
+                    $"Payment: {sender.Name} -> {receiver.Name}: {amount:N0} (net: {netAmount:N0}, tax: {taxAmount:N0}) {config.CurrencyName.Value}"
                 );
             }
             catch (Exception ex)
@@ -856,6 +906,29 @@ namespace JgransEconomySystem
 
             await bank.ResetAllCurrencyAmounts();
             player.SendMessage("All bank accounts have been reset.", Color.LightBlue);
+        }
+
+        private async Task HandleServerBalanceCommand(TSPlayer player)
+        {
+            if (!player.Group.HasPermission("jgranserver.admin"))
+            {
+                player.SendErrorMessage("You don't have permission to check the server balance.");
+                return;
+            }
+
+            try
+            {
+                int serverBalance = await bank.GetCurrencyAmount(0);
+                player.SendMessage(
+                    $"Server Bank Balance: [c/#00FF6E:{serverBalance:N0}] {config.CurrencyName.Value}",
+                    Color.LightBlue
+                );
+            }
+            catch (Exception ex)
+            {
+                TShock.Log.Error($"Error in HandleServerBalanceCommand: {ex.Message}");
+                player.SendErrorMessage("An error occurred while checking the server balance.");
+            }
         }
 
         private void OnNetGetData(GetDataEventArgs args)
@@ -1295,17 +1368,17 @@ namespace JgransEconomySystem
         {
             try
             {
-                if (config.LastWorldId.Value != -1 && config.LastWorldId.Value != Main.worldID)
+                if (config.LastWorldId.Value != -1 && config.LastWorldId.Value != WorldID)
                 {
                     // World has changed, reset ranks
                     await ResetRanksOnWorldChange();
                 }
 
                 // Update the stored world ID
-                config.LastWorldId.Value = Main.worldID;
+                config.LastWorldId.Value = WorldID;
                 config.Write(configPath);
 
-                TShock.Log.Info($"World ID updated to: {Main.worldID}");
+                TShock.Log.Info($"World ID updated to: {WorldID}");
             }
             catch (Exception ex)
             {
@@ -1366,7 +1439,7 @@ namespace JgransEconomySystem
                                     .FindIndex(r => r.Name == currentRank.Name) + 1;
                             await bank.SavePreviousRank(
                                 account.ID,
-                                Main.worldID.ToString(),
+                                WorldID.ToString(),
                                 position
                             );
                         }
@@ -1417,12 +1490,12 @@ namespace JgransEconomySystem
                 return;
             }
 
-            config.LastWorldId.Value = Main.worldID;
+            config.LastWorldId.Value = WorldID;
             config.Write(configPath);
 
-            args.Player.SendSuccessMessage($"World ID initialized to: {Main.worldID}");
+            args.Player.SendSuccessMessage($"World ID initialized to: {WorldID}");
             TShock.Log.Info(
-                $"World ID manually initialized to {Main.worldID} by {args.Player.Name}"
+                $"World ID manually initialized to {WorldID} by {args.Player.Name}"
             );
         }
 
@@ -1484,6 +1557,12 @@ namespace JgransEconomySystem
         {
             try
             {
+                if (config == null)
+                {
+                    TShock.Log.Error("Config is null in CheckAndUpdateWeekendBonus");
+                    return;
+                }
+
                 bool wasWeekendBonus = isWeekendBonus;
                 UpdateWeekendBonusStatus();
 
@@ -1518,12 +1597,13 @@ namespace JgransEconomySystem
             catch (Exception ex)
             {
                 TShock.Log.Error($"Error in CheckAndUpdateWeekendBonus: {ex.Message}");
+                TShock.Log.Error($"Stack trace: {ex.StackTrace}");
             }
         }
 
         private void UpdateWeekendBonusStatus()
         {
-            if (!config.WeekendBonusEnabled.Value)
+            if (config == null || !config.WeekendBonusEnabled.Value)
             {
                 isWeekendBonus = false;
                 return;

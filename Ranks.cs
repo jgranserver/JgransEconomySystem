@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 using Microsoft.Xna.Framework;
 using Terraria;
+using Terraria.IO;
 using TShockAPI;
 using TShockAPI.DB;
 
@@ -15,6 +16,9 @@ namespace JgransEconomySystem
         private static JgransEconomySystemConfig? config;
 
         private static EconomyDatabase bank = new EconomyDatabase(path);
+
+        // Helper property for OTAPI3 compatibility
+        private static int WorldID => Main.ActiveWorldFileData?.UniqueId.GetHashCode() ?? 0;
 
         public string Name { get; set; } = string.Empty;
         public int RequiredCurrencyAmount { get; set; }
@@ -188,7 +192,7 @@ namespace JgransEconomySystem
                 // Calculate costs including tax
                 int previousPosition = await bank.GetPreviousRank(
                     player.Account?.ID ?? 0,
-                    Main.worldID.ToString()
+                    WorldID.ToString()
                 );
                 double additionalMultiplier = GetAdditionalCostMultiplier(previousPosition);
                 int baseCost = nextRank.RequiredCurrencyAmount;
@@ -225,6 +229,12 @@ namespace JgransEconomySystem
                     $"Rank up to {nextRank.Name}",
                     (int)totalCost
                 );
+
+                // Credit tax to server bank
+                if (tax > 0)
+                {
+                    await Transaction.RecordTaxTransaction((int)tax);
+                }
 
                 // Update the player's group
                 var userAccount = TShock.UserAccounts.GetUserAccountByName(player.Name);

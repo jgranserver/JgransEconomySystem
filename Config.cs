@@ -109,203 +109,197 @@ public class JgransEconomySystemConfig
             Description = "The set of hostile NPCs",
             Value = new HashSet<int>()
             {
-                1,
-                3,
-                2,
-                173,
-                6,
-                49,
-                51,
-                150,
-                35,
-                164,
-                165,
-                59,
-                60,
-                61,
-                10,
-                11,
-                12,
-                117,
-                118,
-                119,
-                98,
-                99,
-                100,
-                47,
-                57,
-                168,
-                81,
-                83,
-                183,
-                34,
-                32 /*0x20*/
-                ,
-                62,
-                133,
-                190,
-                191,
-                192 /*0xC0*/
-                ,
-                193,
-                194,
-                24,
-                26,
-                27,
-                28,
-                29,
-                378,
-                58,
-                250,
-                257,
-                69,
-                77,
-                473,
-                474,
-                475,
-                39,
-                40,
-                41,
-                46,
-                101,
-                217,
-                94,
-                494,
-                173,
-                179,
-                34,
-                467,
-                7,
-                8,
-                9,
-                95,
-                96 /*0x60*/
-                ,
-                97,
-                468,
-                71,
-                6,
-                84,
-                581,
-                224 /*0xE0*/
-                ,
-                226,
-                162,
-                259,
-                122,
-                93,
-                152,
-                111,
-                471,
-                28,
-                55,
-                48 /*0x30*/
-                ,
-                60,
-                174,
-                42,
-                150,
-                147,
-                268,
-                137,
-                51,
-                236,
-                -10,
-                59,
-                117,
-                118,
-                119,
-                388,
-                386,
-                383,
-                392,
-                387,
-                16 /*0x10*/
-                ,
-                258,
-                252,
-                148,
-                213,
-                215,
-                214,
-                491,
-                492,
-                75,
-                262,
-                140,
-                244,
-                156,
-                172,
-                269,
-                270,
-                271,
-                541,
-                542,
-                99,
-                98,
-                100,
-                5,
-                65,
-                21,
-                110,
-                293,
-                291,
-                302,
-                187,
-                56,
-                145,
-                185,
-                143,
-                184,
-                204,
-                221,
-                405,
-                406,
-                407,
-                408,
-                411,
-                409,
-                410,
-                403,
-                402,
-                404,
-                292,
-                53,
-                514,
-                513,
-                515,
-                141,
-                546,
-                44,
-                167,
-                86,
-                158,
-                61,
-                164,
-                165,
-                82,
-                3,
-                161,
-                223,
-                320,
-                321,
-                331,
-                319,
-                332,
-                338,
-                254,
-                23,
-                133,
-                190,
-                191,
-                192 /*0xC0*/
-                ,
-                193,
-                194,
-                555,
-                552,
-                566,
-                561,
+                // Pre-Hardmode enemies
+                -10,  // Slime variant
+                1,    // Blue Slime
+                2,    // Demon Eye
+                3,    // Zombie
+                5,    // Servant of Cthulhu
+                6,    // Eater of Souls
+                7,    // Devourer Head
+                8,    // Devourer Body
+                9,    // Devourer Tail
+                10,   // Giant Worm Head
+                11,   // Giant Worm Body
+                12,   // Giant Worm Tail
+                16,   // Mother Slime
+                21,   // Skeleton
+                23,   // Meteor Head
+                24,   // Fire Imp
+                26,   // Goblin Peon
+                27,   // Goblin Thief
+                28,   // Goblin Warrior
+                29,   // Goblin Sorcerer
+                32,   // Angry Bones
+                34,   // Cursed Skull
+                35,   // Skeletron Hand
+                39,   // Bone Serpent Head
+                40,   // Bone Serpent Body
+                41,   // Bone Serpent Tail
+                42,   // Hornet
+                44,   // Undead Miner
+                46,   // Corrupt Bunny
+                47,   // Harpy
+                48,   // Cave Bat
+                49,   // Jungle Bat
+                51,   // Doctor Bones
+                53,   // Piranha
+                55,   // Lava Slime
+                56,   // Hellbat
+                57,   // Vulture
+                58,   // Demon
+                59,   // Blue Jellyfish
+                60,   // Pink Jellyfish
+                61,   // Shark
+                62,   // Voodoo Demon
+                65,   // Antlion
+                69,   // Dungeon Slime
+                71,   // Goblin Scout
+                75,   // Pixie
+                77,   // Mummy
+                81,   // Corrupt Slime
+                82,   // Wraith
+                83,   // Cursed Hammer
+                84,   // Enchanted Sword
+                86,   // Unicorn
+                93,   // Giant Bat
+                94,   // Corruptor
+                95,   // Digger Head
+                96,   // Digger Body
+                97,   // Digger Tail
+                98,   // World Feeder Head
+                99,   // World Feeder Body
+                100,  // World Feeder Tail
+                101,  // Clinger
+                110,  // Werewolf
+                111,  // Clown
+                117,  // Skeleton Archer
+                118,  // Goblin Archer
+                119,  // Vile Spit
+                122,  // Chaos Elemental
+                133,  // Gastropod
+                137,  // Wandering Eye
+                140,  // Possessed Armor
+                141,  // Toxic Sludge
+                143,  // Snowman Gangsta
+                145,  // Snow Balla
+                147,  // Ice Bat
+                148,  // Lava Bat
+                150,  // Giant Flying Fox
+                152,  // Ice Tortoise
+                156,  // Wolf
+                158,  // Red Devil
+                161,  // Vampire
+                162,  // Angler Fish
+                164,  // Crimera
+                165,  // Herpling
+                167,  // Angry Trapper
+                168,  // Moss Hornet
+                172,  // Pigron variants
+                173,  // Face Monster
+                174,  // Floaty Gross
+                179,  // Spiked Ice Slime
+                183,  // Crimson Axe
+                184,  // Mister Stabby
+                185,  // Snow Balla
+                187,  // Giant Tortoise
+                190,  // Lihzahrd
+                191,  // Lihzahrd Crawler
+                192,  // Flying Snake
+                193,  // Spiked Jungle Slime
+                194,  // Moth
+                204,  // Jungle Creeper
+                213,  // Blue Armored Bones
+                214,  // Hell Armored Bones
+                215,  // Rusty Armored Bones
+                217,  // Armored Skeleton
+                221,  // Ragged Caster
+                223,  // Diabolist
+                224,  // Necromancer
+                226,  // Bone Lee
+                236,  // Ichor Sticker
+                244,  // Giant Cursed Skull
+                250,  // Dark Mummy
+                252,  // Light Mummy
+                254,  // Pirate Deckhand
+                257,  // Armored Viking
+                258,  // Pirate Corsair
+                259,  // Icy Merman
+                262,  // Paladin
+                268,  // Snow Flinx
+                269,  // Rusty Armored Bones
+                270,  // Blue Armored Bones
+                271,  // Hell Armored Bones
+                291,  // Tactical Skeleton
+                292,  // Skeleton Commando
+                293,  // Skeleton Sniper
+                302,  // Pirate Captain
+                319,  // Blood Zombie
+                320,  // Blood Crawler
+                321,  // Blood Feeder
+                331,  // Blood Jelly
+                332,  // Ice Golem
+                338,  // Rainbow Slime
+                378,  // Angry Nimbus
+                383,  // Fungi Bulb
+                386,  // Giant Fungi Bulb
+                387,  // Anomura Fungus
+                388,  // Mushi Ladybug
+                392,  // Spore Zombie
+                402,  // Goblin Warlock
+                403,  // Shadowflame Apparition
+                404,  // Corrupt Mimic
+                405,  // Crimson Mimic
+                406,  // Hallowed Mimic
+                407,  // Jungle Mimic
+                408,  // Mothron
+                409,  // Medusa
+                410,  // Hoplite
+                411,  // Granite Golem
+                467,  // Sand Poacher
+                468,  // Basilisk
+                471,  // Desert Spirit
+                473,  // Sand Shark
+                474,  // Bone Biter
+                475,  // Flesh Reaver
+                491,  // Dune Splicer Head
+                492,  // Dune Splicer Body
+                494,  // Tomb Crawler Head
+                513,  // Crawltipede Head
+                514,  // Drakomire
+                515,  // Drakomire Rider
+                541,  // Selenian
+                542,  // Corite
+                546,  // Sroller
+                552,  // Nebula Floater
+                555,  // Brain Suckler
+                561,  // Storm Diver
+                566,  // Vortexian
+                581,  // Pirate's Curse
+                // 1.4.0 enemies
+                582,  // Blood Zombie (Surface)
+                583,  // Drippler
+                602,  // Zombie Merman
+                603,  // Wandering Eye Fish
+                605,  // Torch Zombie
+                606,  // Armed Torch Zombie
+                610,  // Windy Balloon
+                616,  // Gnome
+                624,  // Angry Dandelion
+                625,  // Ice Mimic
+                626,  // Blood Mummy
+                627,  // Rock Golem
+                628,  // Maggot Zombie
+                630,  // Spore Bat
+                631,  // Spore Skeleton
+                // 1.4.4 enemies
+                677,  // Shimmer Slime
+                689,  // Owl Mimic
+                // 1.4.5 enemies
+                690,  // Statue Mimic
+                691,  // Moss Zombie
+                692,  // Orca
+                693,  // Librarian Skeleton
             },
         };
 
@@ -377,6 +371,13 @@ public class JgransEconomySystemConfig
                 574,
                 568,
                 572,
+                // 1.4.0 enemies
+                620,  // Hemogoblin Shark
+                619,  // Blood Squid
+                // 1.4.3 enemies
+                665,  // Golden Slime
+                // 1.4.5 enemies
+                694,  // Water Bolt Mimic
             },
         };
 
@@ -384,7 +385,7 @@ public class JgransEconomySystemConfig
         new JgransEconomySystemConfig.ConfigProperty<HashSet<int>>()
         {
             Description = "The set of Boss NPCs (group 1)",
-            Value = new HashSet<int>() { 50, 4, 15, 266, 564 },
+            Value = new HashSet<int>() { 50, 4, 15, 266, 564, 657 /* Queen Slime */ },
         };
 
     public JgransEconomySystemConfig.ConfigProperty<HashSet<int>> BossNPCs2 { get; set; } =
